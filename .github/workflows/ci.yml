@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - '*'
-      - '!master'  # Master branch has its own workflow
+      - '!main'  # Main branch has its own workflow
     paths:
       - 'client/**'
       - 'server/**'
