@@ -1,0 +1,47 @@
+name: Master Branch Verification
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build client image
+      run: docker build -t urlshortener-client:${{ github.sha }} ./client
+
+    - name: Build server image
+      run: docker build -t urlshortener-server:${{ github.sha }} ./server
+
+    - name: Run Trivy scanner - Client
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'urlshortener-client:${{ github.sha }}'
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Run Trivy scanner - Server
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'urlshortener-server:${{ github.sha }}'
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Run container structure tests - Client
+      uses: plexsystems/container-structure-test-action@v0.2.0
+      with:
+        image: urlshortener-client:${{ github.sha }}
+        config: ./client/container-structure-tests.yaml
+
+    - name: Run container structure tests - Server
+      uses: plexsystems/container-structure-test-action@v0.2.0
+      with:
+        image: urlshortener-server:${{ github.sha }}
+        config: ./server/container-structure-tests.yaml
