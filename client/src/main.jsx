@@ -6,15 +6,15 @@ import { CSSReset, theme, ChakraProvider, ColorModeProvider, ThemeProvider } fro
 import { BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
 
-const serverLocal = "http://localhost:5000";
-const serverBaseUrl = import.meta.env.VITE_APP_URI;
+// Use the environment variable for server URL
+const serverBaseUrl = import.meta.env.VITE_APP_URI || 'http://localhost:5001';
 axios.defaults.baseURL = serverBaseUrl;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <ChakraProvider>
             <BrowserRouter>
-                <ThemeProvider theme={ theme }>
+                <ThemeProvider theme={theme}>
                     <ColorModeProvider>
                         <CSSReset />
                         <App />

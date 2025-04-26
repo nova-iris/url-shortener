@@ -8,17 +8,15 @@ router.get('/:code', async (req, res) => {
             urlCode: code
         });
         if (url) {
-            return res.redirect(url.longUrl);
+            return res.json({ longUrl: url.longUrl });
         } else {
-            return res.status(404).json('No URL Found');
+            return res.status(404).json({ error: 'No URL Found' });
         }
-
     }
     catch (err) {
         console.error(err);
-        res.status(500).json('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 });
-
 
 module.exports = router;

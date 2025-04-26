@@ -16,21 +16,21 @@ import {
 import styles from './InputForm.module.css';
 
 export const InputForm = () => {
-    const [ input, setInput ] = useState(
+    const [input, setInput] = useState(
         {
             longUrl: "",
             urlCode: ""
         }
     );
-    const [ url, setUrl ] = useState("");
-    const [ isLoading, setIsloading ] = useState(false);
-    const [ isError, setIsError ] = useState(false);
+    const [url, setUrl] = useState("");
+    const [isLoading, setIsloading] = useState(false);
+    const [isError, setIsError] = useState(false);
     const { hasCopied, onCopy } = useClipboard(url);
     const clientBaseUrl = window.location.href;
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
-        setInput({ ...input, [ id ]: value });
+        setInput({ ...input, [id]: value });
         setIsError(false);
     };
     const handleEnter = (e) => {
@@ -47,9 +47,9 @@ export const InputForm = () => {
         setIsloading(true);
         axios.post('/api/url/shorten', input).then(res => {
             if (res.status) {
-                let data = res.data;
-                let createUrl = clientBaseUrl + data.urlCode;
-                setUrl(createUrl);
+                const data = res.data;
+                const shortenedUrl = clientBaseUrl + data.urlCode;
+                setUrl(shortenedUrl);
             }
             console.log("res", res);
             setIsloading(false);
@@ -63,55 +63,55 @@ export const InputForm = () => {
 
     return (
         <Box
-            width={ "40%" }
-            margin={ "auto" }
+            width={"40%"}
+            margin={"auto"}
             boxShadow="dark-lg"
             p="6"
             rounded="2xl"
             bg="dark"
-            className={ styles.mainContainer } >
-            <FormControl isInvalid={ isError }>
+            className={styles.mainContainer} >
+            <FormControl isInvalid={isError}>
                 <FormLabel >Convert long URLs into shortened versions with a single click.</FormLabel>
                 <Input
                     id="longUrl"
                     type="url"
-                    value={ input.longUrl }
+                    value={input.longUrl}
                     placeholder="Paste here your long URL"
-                    onChange={ handleInputChange }
-                    onKeyDown={ handleEnter }
+                    onChange={handleInputChange}
+                    onKeyDown={handleEnter}
                 />
-                { !isError ? (
+                {!isError ? (
                     <FormHelperText>Enter your Long Url</FormHelperText>
                 ) : (
                     <FormErrorMessage>URL is required.</FormErrorMessage>
-                ) }
+                )}
             </FormControl>
-            <FormLabel mt={ 7 } fontSize='md'>Create personalized and memorable links for your URLs (Optional)</FormLabel>
-            <InputGroup size='md' className={ styles.InputGroup }>
-                <InputLeftAddon children={ `${clientBaseUrl}` } className={ styles.BaseUrlAddon } w='50%' />
+            <FormLabel mt={7} fontSize='md'>Create personalized and memorable links for your URLs (Optional)</FormLabel>
+            <InputGroup size='md' className={styles.InputGroup}>
+                <InputLeftAddon children={`${clientBaseUrl}`} className={styles.BaseUrlAddon} w='50%' />
                 <Input placeholder='your personalized code ' id="urlCode"
                     type="text"
-                    value={ input.urlCode }
-                    onChange={ handleInputChange }
+                    value={input.urlCode}
+                    onChange={handleInputChange}
                     w='50%'
-                    onKeyDown={ handleEnter }
+                    onKeyDown={handleEnter}
                 />
             </InputGroup>
             <Button type="submit"
                 colorScheme="blue"
-                m={ 5 }
-                onClick={ handleSubmit }
-                isLoading={ isLoading }
+                m={5}
+                onClick={handleSubmit}
+                isLoading={isLoading}
                 loadingText='Submitting'
             >
                 Submit
             </Button>
-            { url && <Flex mb={ 2 }>
-                <Input value={ url } isReadOnly placeholder="Short Url" />
-                <Button onClick={ onCopy } ml={ 2 }>
-                    { hasCopied ? "Copied" : "Copy" }
+            {url && <Flex mb={2}>
+                <Input value={url} isReadOnly placeholder="Short Url" />
+                <Button onClick={onCopy} ml={2}>
+                    {hasCopied ? "Copied" : "Copy"}
                 </Button>
-            </Flex> }
+            </Flex>}
         </Box>
     );
 };

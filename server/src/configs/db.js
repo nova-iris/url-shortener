@@ -1,10 +1,15 @@
 const mongoose = require("mongoose");
-require("dotenv").config();
-
-// const DB_URL = 'mongodb://localhost:27017/urlshortener';
+const dbConfig = require("./dbConfig");
 
 const connect = () => {
-    return mongoose.connect(process.env.DB_URL);
+    return mongoose.connect(dbConfig.url, dbConfig.options)
+        .then(() => {
+            console.log('Successfully connected to MongoDB.');
+        })
+        .catch((error) => {
+            console.error('Error connecting to MongoDB:', error);
+            throw error;
+        });
 };
 
 module.exports = connect;
