@@ -1,52 +1,45 @@
 # Build stage
 FROM node:20.12.0-alpine3.19 AS builder
 
-# Set NODE_ENV
-ENV NODE_ENV=production
-
-# Set working directory
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies with exact versions
 RUN npm ci
-
-# Copy source
 COPY . .
 
-# Build the application
+# Create .env file from environment variables
+RUN echo "VITE_APP_URI=$VITE_APP_URI" > .env
 RUN npm run build
 
 # Production stage
-FROM nginx:1.25.4-alpine
+FROM node:20.12.0-alpine3.19
 
-# Add non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+# Add non-root user and install wget
+RUN addgroup -S appgroup && \
+    adduser -S appuser -G appgroup && \
     apk add --no-cache wget && \
     apk upgrade --no-cache && \
-    rm -rf /var/cache/apk/* && \
-    # Set restrictive permissions
-    chmod -R 555 /app
+    rm -rf /var/cache/apk/*
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Set working directory and copy built files
+WORKDIR /app
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
 
-# Install only production dependencies
+# Install only production dependencies and set permissions
 RUN npm ci --only=production && \
     npm cache clean --force && \
-    chown -R appuser:appgroup /app
+    chown -R appuser:appgroup /app && \
+    chmod -R 555 /app
 
 # Switch to non-root user
 USER appuser
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:4173/ || exit 1
 
-# Expose port
-EXPOSE 80
+# Expose the port the app runs on
+EXPOSE 4173
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start the application in preview mode with host exposed
+CMD ["npm", "run", "preview", "--", "--host"]
