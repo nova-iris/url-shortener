@@ -23,19 +23,20 @@ RUN npm run build
 FROM nginx:1.25.4-alpine
 
 # Add non-root user
-RUN addgroup -S appgroup && \
-    adduser -S appuser -G appgroup && \
-    chown -R appuser:appgroup /var/cache/nginx /var/run /var/log/nginx && \
-    # Modify nginx config to use non-root user
-    sed -i 's/user  nginx/user  appuser/g' /etc/nginx/nginx.conf && \
-    # Remove default nginx static assets
-    rm -rf /usr/share/nginx/html/*
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    apk add --no-cache wget && \
+    apk upgrade --no-cache && \
+    rm -rf /var/cache/apk/* && \
+    # Set restrictive permissions
+    chmod -R 555 /app
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built files from builder
-COPY --from=builder --chown=appuser:appgroup /app/dist /usr/share/nginx/html
+# Install only production dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force && \
+    chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
