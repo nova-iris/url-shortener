@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Default values for url-shortener
 global:
   environment: production
@@ -27,6 +28,20 @@ server:
     repository: ghcr.io/nova-iris/url-shortener/server
     tag: latest
     pullPolicy: Always
+=======
+global:
+  environment: production
+
+nameOverride: ""
+fullnameOverride: ""
+
+server:
+  name: server
+  image:
+    repository: ghcr.io/nova-iris/url-shortener/server
+    tag: latest
+    pullPolicy: IfNotPresent
+>>>>>>> 5830b7a (docker works)
   replicaCount: 1
   resources:
     limits:
@@ -38,6 +53,7 @@ server:
   service:
     type: ClusterIP
     port: 5000
+<<<<<<< HEAD
   ingress:
     enabled: false
   env:
@@ -45,16 +61,33 @@ server:
   healthcheck:
     enabled: true
     path: /health
+=======
+    nodePort: null  # Set a value between 30000-32767 to use NodePort
+  env:
+    NODE_ENV: production
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+>>>>>>> 5830b7a (docker works)
     initialDelaySeconds: 30
     periodSeconds: 30
     timeoutSeconds: 3
     failureThreshold: 3
 
 client:
+<<<<<<< HEAD
   image:
     repository: ghcr.io/nova-iris/url-shortener/client
     tag: latest
     pullPolicy: Always
+=======
+  name: client
+  image:
+    repository: ghcr.io/nova-iris/url-shortener/client
+    tag: latest
+    pullPolicy: IfNotPresent
+>>>>>>> 5830b7a (docker works)
   replicaCount: 1
   resources:
     limits:

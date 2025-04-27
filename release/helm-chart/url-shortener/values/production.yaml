@@ -1,0 +1,57 @@
+global:
+  environment: production
+
+server:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+client:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: "url-shortener.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: client
+          port: 4173
+        - path: /api
+          pathType: Prefix
+          service: server
+          port: 5000
+  tls:
+    - secretName: url-shortener-tls
+      hosts:
+        - url-shortener.example.com
+
+mongodb:
+  architecture: replicaset
+  replicaCount: 3
+  auth:
+    rootPassword: ""  # Should be provided via external secret management
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 1000m
+      memory: 1Gi

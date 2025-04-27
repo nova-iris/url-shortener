@@ -74,10 +74,13 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
+      args:
+        - BACKEND_URL=http://server:5000 # Used during build time
     init: true
     restart: unless-stopped
     environment:
-      - VITE_APP_URI=http://localhost:5000
+      - VITE_APP_URI=http://server:5000 # This won't affect the built app
+      - BACKEND_URL=http://server:5000 # Runtime configuration for backend URL
     ports:
       - "4173:4173"
     depends_on:
@@ -100,7 +103,7 @@ services:
           memory: 128M
     security_opt:
       - no-new-privileges:true
-    read_only: true
+    read_only: false
     tmpfs:
       - /tmp
 

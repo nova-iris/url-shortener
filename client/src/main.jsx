@@ -6,8 +6,14 @@ import { CSSReset, theme, ChakraProvider, ColorModeProvider, ThemeProvider } fro
 import { BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
 
-// Use the environment variable for server URL
-const serverBaseUrl = import.meta.env.VITE_APP_URI || 'http://localhost:5000';
+// Use the runtime configuration instead of build-time env variables
+console.log('Runtime config:', window.RUNTIME_CONFIG);
+
+// Get backend URL from runtime config with fallback to default
+const serverBaseUrl = window.RUNTIME_CONFIG?.BACKEND_URL || 'http://localhost:5000';
+console.log('Using backend URL:', serverBaseUrl);
+
+// Configure axios
 axios.defaults.baseURL = serverBaseUrl;
 
 ReactDOM.createRoot(document.getElementById('root')).render(

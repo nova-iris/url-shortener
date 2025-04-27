@@ -1,0 +1,26 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+{{- if .Values.ingress.enabled }}
+You can access the application using these URLs:
+{{- range .Values.ingress.hosts }}
+  http://{{ .host }}
+{{- end }}
+{{- else }}
+To access the application, you need to forward the service ports:
+
+For the client:
+  kubectl port-forward svc/{{ include "url-shortener.fullname" . }}-client {{ .Values.client.service.port }}:{{ .Values.client.service.port }}
+
+For the server:
+  kubectl port-forward svc/{{ include "url-shortener.fullname" . }}-server {{ .Values.server.service.port }}:{{ .Values.server.service.port }}
+{{- end }}
+
+For more information about the URL Shortener application, visit:
+https://github.com/nova-iris/url-shortener
