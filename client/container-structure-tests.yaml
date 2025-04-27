@@ -1,0 +1,26 @@
+schemaVersion: 2.0.0
+
+commandTests:
+  - name: "node version"
+    command: "node"
+    args: ["--version"]
+    expectedOutput: ["v18"]
+  - name: "npm availability"
+    command: "npm"
+    args: ["--version"]
+    expectedOutput: [".+"]
+
+fileExistenceTests:
+  - name: "package.json exists"
+    path: "/app/package.json"
+    shouldExist: true
+  - name: "vite config exists"
+    path: "/app/vite.config.js"
+    shouldExist: true
+
+metadataTest:
+  workdir: "/app"
+  exposedPorts: ["4173"]
+  env:
+    - key: "PATH"
+      value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
