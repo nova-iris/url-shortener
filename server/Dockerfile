@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.12.0-alpine3.19 AS builder
+FROM node:23-alpine3.20 AS builder
 
 # Set NODE_ENV
 ENV NODE_ENV=production
@@ -17,12 +17,12 @@ RUN npm ci --only=production
 COPY . .
 
 # Production stage
-FROM node:20.12.0-alpine3.19
+FROM node:23-alpine3.20
 
-# Add non-root user and install wget
+# Add non-root user and install wget and dumb-init
 RUN addgroup -S appgroup && \
     adduser -S appuser -G appgroup && \
-    apk add --no-cache wget && \
+    apk add --no-cache wget dumb-init && \
     apk upgrade --no-cache && \
     rm -rf /var/cache/apk/*
 

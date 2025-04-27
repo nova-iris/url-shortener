@@ -14,7 +14,8 @@ app.get("/health", (req, res) => {
     res.status(200).send("OK");
 });
 
-app.use("/url", urlRouter);
+// Add API prefix to URL routes
+app.use("/api/url", urlRouter);
 app.use("/", redirectRouter);
 
 const port = process.env.PORT || 5000;
