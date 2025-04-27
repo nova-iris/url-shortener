@@ -1,0 +1,13 @@
+apiVersion: v2
+name: url-shortener
+description: A Helm chart for URL Shortener application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - url-shortener
+  - nodejs
+  - react
+maintainers:
+  - name: nova-iris
+home: https://github.com/nova-iris/url-shortener

@@ -6,17 +6,16 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 
-# Create .env file from environment variables
-RUN echo "VITE_APP_URI=$VITE_APP_URI" > .env
+# Build the application
 RUN npm run build
 
 # Production stage
 FROM node:23-alpine3.20
 
-# Add non-root user and install wget
+# Add non-root user and install wget and sed
 RUN addgroup -S appgroup && \
     adduser -S appuser -G appgroup && \
-    apk add --no-cache wget && \
+    apk add --no-cache wget sed && \
     apk upgrade --no-cache && \
     rm -rf /var/cache/apk/*
 
@@ -26,11 +25,18 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/vite.config.js ./
 
+# Copy the entrypoint script from the host, not from the builder stage
+COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh && \
+    # Ensure script has Unix-style line endings (in case of Windows)
+    sed -i 's/\r$//' /docker-entrypoint.sh && \
+    # Verify the script exists and is executable
+    ls -la /docker-entrypoint.sh
+
 # Install only production dependencies and set permissions
 RUN npm ci && \
     npm cache clean --force && \
-    chown -R appuser:appgroup /app && \
-    chmod -R 555 /app
+    chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
@@ -42,5 +48,5 @@ HEALTHCHECK --interval=30s --timeout=3s \
 # Expose the port the app runs on
 EXPOSE 4173
 
-# Start the application in preview mode with host and port explicitly set
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173"]
+# Set the entrypoint script
+ENTRYPOINT ["/docker-entrypoint.sh"]

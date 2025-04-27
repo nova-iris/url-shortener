@@ -33,20 +33,28 @@ export const InputForm = () => {
         setInput({ ...input, [id]: value });
         setIsError(false);
     };
+
     const handleEnter = (e) => {
         if (e.key === "Enter") {
             handleSubmit();
         }
     };
+
     const handleSubmit = () => {
         if (!input.longUrl) {
             setIsError(true);
             setUrl("Please add a URL");
             return;
         }
+
         setIsloading(true);
-        axios.post('/api/url/shorten', input)
+
+        const apiUrl = '/api/url/shorten';
+        console.log('Making API request to:', axios.defaults.baseURL + apiUrl);
+
+        axios.post(apiUrl, input)
             .then(res => {
+                console.log('API response:', res);
                 if (res?.data) {
                     const shortenedUrl = clientBaseUrl + res.data.urlCode;
                     setUrl(shortenedUrl);
@@ -54,9 +62,19 @@ export const InputForm = () => {
                 setIsloading(false);
             })
             .catch(error => {
+                console.error('API error details:', {
+                    message: error.message,
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    config: {
+                        url: error.config?.url,
+                        baseURL: error.config?.baseURL,
+                        method: error.config?.method
+                    }
+                });
+
                 const errorMsg = error?.response?.data?.error || 'Failed to connect to server';
                 setUrl(errorMsg);
-                console.error("Error:", error);
                 setIsloading(false);
             });
     };
