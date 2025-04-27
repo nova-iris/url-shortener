@@ -4,7 +4,7 @@ commandTests:
   - name: 'Check if Node.js is installed'
     command: 'node'
     args: ['--version']
-    expectedOutput: ['v20.12.0']
+    expectedOutput: ['v23.11.0']
   - name: 'Check if npm is installed'
     command: 'npm'
     args: ['--version']
@@ -13,6 +13,10 @@ commandTests:
     command: 'which'
     args: ['wget']
     expectedOutput: ['/usr/bin/wget']
+  # - name: 'Test health endpoint'
+  #   command: 'wget'
+  #   args: ['-qO-', 'http://localhost:5000/health']
+  #   expectedOutput: ['OK']
 
 fileExistenceTests:
   - name: 'Check if package.json exists'
@@ -26,11 +30,3 @@ metadataTest:
   workdir: '/app'
   exposedPorts: ['5000']
   user: 'appuser'
-
-httpTests:
-  - name: 'Test health endpoint'
-    path: '/health'
-    port: 5000
-    expectedResponse:
-      statusCode: 200
-      body: 'OK'

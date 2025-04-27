@@ -17,7 +17,7 @@ commandTests:
   - name: 'Check if Node.js is installed'
     command: 'node'
     args: ['--version']
-    expectedOutput: ['v20.12.0']
+    expectedOutput: ['v23.11.0']
   - name: 'Check if npm is installed'
     command: 'npm'
     args: ['--version']
