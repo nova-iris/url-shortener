@@ -19,23 +19,23 @@ COPY . .
 # Production stage
 FROM node:20.12.0-alpine3.19
 
-# Add non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+# Add non-root user and install wget
+RUN addgroup -S appgroup && \
+    adduser -S appuser -G appgroup && \
     apk add --no-cache wget && \
     apk upgrade --no-cache && \
-    rm -rf /var/cache/apk/* && \
-    # Set restrictive permissions
-    chmod -R 555 /app
+    rm -rf /var/cache/apk/*
 
 # Set working directory and copy built files
 WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/src ./src
 
-# Install only production dependencies
+# Install only production dependencies and set permissions
 RUN npm ci --only=production && \
     npm cache clean --force && \
-    chown -R appuser:appgroup /app
+    chown -R appuser:appgroup /app && \
+    chmod -R 555 /app
 
 # Switch to non-root user
 USER appuser
