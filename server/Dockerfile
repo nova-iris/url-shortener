@@ -1,5 +1,5 @@
 # Build stage
-FROM node:23.11.0-alpine-slim AS builder
+FROM node:20.12.0-alpine3.19 AS builder
 
 # Set NODE_ENV
 ENV NODE_ENV=production
@@ -17,7 +17,7 @@ RUN npm ci --only=production
 COPY . .
 
 # Production stage
-FROM node:23.11.0-alpine-slim
+FROM node:20.12.0-alpine3.19
 
 # Set NODE_ENV
 ENV NODE_ENV=production

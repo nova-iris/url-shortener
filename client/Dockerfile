@@ -1,5 +1,5 @@
 # Build stage
-FROM node:23.11.0-alpine-slim AS builder
+FROM node:20.12.0-alpine3.19 AS builder
 
 # Set NODE_ENV
 ENV NODE_ENV=production
@@ -20,7 +20,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:1.28.0-alpine
+FROM nginx:1.25.4-alpine
 
 # Add non-root user
 RUN addgroup -S appgroup && \
