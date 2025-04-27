@@ -17,8 +17,12 @@ commandTests:
   - name: 'Check if Node.js is installed'
     command: 'node'
     args: ['--version']
-    expectedOutput: ['v20']
+    expectedOutput: ['v20.12.0']
   - name: 'Check if npm is installed'
     command: 'npm'
     args: ['--version']
     expectedOutput: ['.*']
+  - name: 'Check if wget is installed'
+    command: 'which'
+    args: ['wget']
+    expectedOutput: ['/usr/bin/wget']
