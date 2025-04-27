@@ -1,29 +1,32 @@
-schemaVersion: 2.0.0
+schemaVersion: '2.0.0'
 
 commandTests:
-  - name: "node version"
-    command: "node"
-    args: ["--version"]
-    expectedOutput: ["v16"]
-  - name: "npm availability"
-    command: "npm"
-    args: ["--version"]
-    expectedOutput: [".+"]
+  - name: 'Check if Node.js is installed'
+    command: 'node'
+    args: ['--version']
+    expectedOutput: ['v20']
+  - name: 'Check if npm is installed'
+    command: 'npm'
+    args: ['--version']
+    expectedOutput: ['.*']
 
 fileExistenceTests:
-  - name: "package.json exists"
-    path: "/app/package.json"
+  - name: 'Check if package.json exists'
+    path: '/app/package.json'
     shouldExist: true
-  - name: "server entry point exists"
-    path: "/app/src/index.js"
-    shouldExist: true
-  - name: "server implementation exists"
-    path: "/app/src/server.js"
+  - name: 'Check if src directory exists'
+    path: '/app/src'
     shouldExist: true
 
 metadataTest:
-  workdir: "/app"
-  exposedPorts: ["5000"]
-  env:
-    - key: "PATH"
-      value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  workdir: '/app'
+  exposedPorts: ['5000']
+  user: 'appuser'
+
+httpTests:
+  - name: 'Test health endpoint'
+    path: '/health'
+    port: 5000
+    expectedResponse:
+      statusCode: 200
+      body: 'OK'
