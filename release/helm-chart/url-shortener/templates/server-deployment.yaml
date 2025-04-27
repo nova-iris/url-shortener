@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-server
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "url-shortener.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "url-shortener.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.server.env.NODE_ENV }}
+            - name: MONGODB_URI
+              value: mongodb://$(MONGO_ROOT_USERNAME):$(MONGO_ROOT_PASSWORD)@{{ include "url-shortener.fullname" . }}-mongodb:27017/urlshortener?authSource=admin
+            - name: MONGO_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.auth.existingSecret }}
+                  key: {{ .Values.mongodb.auth.userKey }}
+            - name: MONGO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.auth.existingSecret }}
+                  key: {{ .Values.mongodb.auth.passwordKey }}
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          {{- if .Values.server.healthcheck.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.server.healthcheck.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.server.healthcheck.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.healthcheck.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.healthcheck.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.healthcheck.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.server.healthcheck.path }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- end }}
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
