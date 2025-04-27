@@ -1,20 +1,54 @@
-# Use an official Node.js runtime as the base image
-FROM node:16.15.0-alpine
+# Build stage
+FROM node:23-alpine3.20 AS builder
 
-# Set the working directory in the container
+# Set NODE_ENV
+ENV NODE_ENV=production
+
+# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json to the working directory
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with exact versions
+RUN npm ci --only=production
 
-# Copy the rest of the application code to the working directory
+# Copy source
 COPY . .
+
+# Production stage
+FROM node:23-alpine3.20
+
+# Add non-root user and install wget and dumb-init
+RUN addgroup -S appgroup && \
+    adduser -S appuser -G appgroup && \
+    apk add --no-cache wget dumb-init && \
+    apk upgrade --no-cache && \
+    rm -rf /var/cache/apk/*
+
+# Set working directory and copy built files
+WORKDIR /app
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/src ./src
+
+# Install only production dependencies and set permissions
+RUN npm ci --only=production && \
+    npm cache clean --force && \
+    chown -R appuser:appgroup /app && \
+    chmod -R 555 /app
+
+# Switch to non-root user
+USER appuser
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
 
 # Expose the port the app runs on
 EXPOSE 5000
+
+# Use dumb-init as entrypoint
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
 # Start the application
 CMD ["npm", "start"]

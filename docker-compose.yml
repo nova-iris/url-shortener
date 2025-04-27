@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME_FILE=/run/secrets/mongo_root_username
+      - MONGO_INITDB_ROOT_PASSWORD_FILE=/run/secrets/mongo_root_password
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./secrets/mongo_root_username.txt:/run/secrets/mongo_root_username:ro
+      - ./secrets/mongo_root_password.txt:/run/secrets/mongo_root_password:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongo:27017/urlshortener
+      - MONGO_INITDB_ROOT_USERNAME_FILE=/run/secrets/mongo_root_username
+      - MONGO_INITDB_ROOT_PASSWORD_FILE=/run/secrets/mongo_root_password
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./secrets/mongo_root_username.txt:/run/secrets/mongo_root_username:ro
+      - ./secrets/mongo_root_password.txt:/run/secrets/mongo_root_password:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    environment:
+      - VITE_APP_URI=http://localhost:5000
+    ports:
+      - "4173:4173"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4173/" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.15'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,85 @@
+name: Master Branch Verification
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - 'main'
+
+jobs:
+  verify-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build client image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          load: true
+          tags: urlshortener-client:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner for client
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: urlshortener-client:test
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Install container-structure-test
+        run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+          container-structure-test version
+
+      - name: Test client container structure
+        run: container-structure-test test --image urlshortener-client:test --config ./client/container-structure-tests.yaml --verbosity debug
+
+  verify-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          load: true
+          tags: urlshortener-server:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner for server
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: urlshortener-server:test
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Install container-structure-test
+        run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+          container-structure-test version
+
+      - name: Test server container structure
+        run: container-structure-test test --image urlshortener-server:test --config ./server/container-structure-tests.yaml --verbosity debug

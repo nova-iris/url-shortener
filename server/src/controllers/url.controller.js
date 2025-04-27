@@ -45,7 +45,10 @@ router.post("/shorten", async (req, res) => {
         const existingURL = await URLModel.findOne({ longUrl });
 
         if (existingURL && !urlCode) {
-            return res.json({ urlCode: existingURL.urlCode });
+            return res.json({
+                urlCode: existingURL.urlCode,
+                shortUrl: existingURL.shortUrl
+            });
         }
 
         let generatedCode;
@@ -62,7 +65,10 @@ router.post("/shorten", async (req, res) => {
             shortUrl,
         });
         await newURL.save();
-        res.status(201).json({ urlCode: generatedCode });
+        res.status(201).json({
+            urlCode: generatedCode,
+            shortUrl: shortUrl
+        });
     } catch (error) {
         console.error('Error shortening URL:', error);
         res.status(500).json({ error: 'Failed to shorten URL' });
