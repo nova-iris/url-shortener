@@ -9,18 +9,12 @@ spec:
   type: {{ .Values.server.service.type }}
   ports:
     - port: {{ .Values.server.service.port }}
-<<<<<<< HEAD
       targetPort: http
-      protocol: TCP
-      name: http
-=======
-      targetPort: {{ .Values.server.service.port }}
       protocol: TCP
       name: http
       {{- if and (eq .Values.server.service.type "NodePort") .Values.server.service.nodePort }}
       nodePort: {{ .Values.server.service.nodePort }}
       {{- end }}
->>>>>>> 5830b7a (docker works)
   selector:
     {{- include "url-shortener.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: server
