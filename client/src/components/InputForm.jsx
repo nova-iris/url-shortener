@@ -45,20 +45,20 @@ export const InputForm = () => {
             return;
         }
         setIsloading(true);
-        axios.post('/api/url/shorten', input).then(res => {
-            if (res.status) {
-                const data = res.data;
-                const shortenedUrl = clientBaseUrl + data.urlCode;
-                setUrl(shortenedUrl);
-            }
-            console.log("res", res);
-            setIsloading(false);
-        }).catch(error => {
-            let errorMsg = error.response.data.error;
-            setUrl(errorMsg);
-            console.log("error", errorMsg);
-            setIsloading(false);
-        });
+        axios.post('/api/url/shorten', input)
+            .then(res => {
+                if (res?.data) {
+                    const shortenedUrl = clientBaseUrl + res.data.urlCode;
+                    setUrl(shortenedUrl);
+                }
+                setIsloading(false);
+            })
+            .catch(error => {
+                const errorMsg = error?.response?.data?.error || 'Failed to connect to server';
+                setUrl(errorMsg);
+                console.error("Error:", error);
+                setIsloading(false);
+            });
     };
 
     return (

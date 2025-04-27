@@ -76,15 +76,17 @@ services:
       dockerfile: Dockerfile
     init: true
     restart: unless-stopped
+    environment:
+      - VITE_APP_URI=http://localhost:5000
     ports:
-      - "80:80"
+      - "4173:4173"
     depends_on:
       server:
         condition: service_healthy
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4173/" ]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -99,6 +101,8 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    tmpfs:
+      - /tmp
 
 volumes:
   mongodb_data:
