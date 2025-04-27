@@ -1,19 +1,33 @@
 # Build stage
-FROM node:20.12.0-alpine3.19 AS builder
+FROM node:23.11.0-alpine-slim AS builder
 
+# Set NODE_ENV
+ENV NODE_ENV=production
+
+# Set working directory
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
-RUN npm ci
+
+# Install dependencies with exact versions
+RUN npm ci --only=production
+
+# Copy source
 COPY . .
 
 # Production stage
-FROM node:20.12.0-alpine3.19
+FROM node:23.11.0-alpine-slim
 
-# Add non-root user and install wget
-RUN addgroup -S appgroup && \
-    adduser -S appuser -G appgroup && \
-    apk add --no-cache wget && \
+# Set NODE_ENV
+ENV NODE_ENV=production
+
+# Add non-root user and install wget, update packages
+RUN apk update && \
     apk upgrade --no-cache && \
+    apk add --no-cache wget dumb-init && \
+    addgroup -S appgroup && \
+    adduser -S appuser -G appgroup && \
     rm -rf /var/cache/apk/*
 
 # Set working directory and copy built files
@@ -36,6 +50,9 @@ HEALTHCHECK --interval=30s --timeout=3s \
 
 # Expose the port the app runs on
 EXPOSE 5000
+
+# Use dumb-init as entrypoint
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
 # Start the application
 CMD ["npm", "start"]

@@ -1,45 +1,51 @@
 # Build stage
-FROM node:20.12.0-alpine3.19 AS builder
+FROM node:23.11.0-alpine-slim AS builder
 
+# Set NODE_ENV
+ENV NODE_ENV=production
+
+# Set working directory
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
+
+# Install dependencies with exact versions
 RUN npm ci
+
+# Copy source
 COPY . .
 
-# Create .env file from environment variables
-RUN echo "VITE_APP_URI=$VITE_APP_URI" > .env
+# Build the application
 RUN npm run build
 
 # Production stage
-FROM node:20.12.0-alpine3.19
+FROM nginx:1.28.0-alpine
 
-# Add non-root user and install wget
+# Add non-root user
 RUN addgroup -S appgroup && \
     adduser -S appuser -G appgroup && \
-    apk add --no-cache wget && \
-    apk upgrade --no-cache && \
-    rm -rf /var/cache/apk/*
+    chown -R appuser:appgroup /var/cache/nginx /var/run /var/log/nginx && \
+    # Modify nginx config to use non-root user
+    sed -i 's/user  nginx/user  appuser/g' /etc/nginx/nginx.conf && \
+    # Remove default nginx static assets
+    rm -rf /usr/share/nginx/html/*
 
-# Set working directory and copy built files
-WORKDIR /app
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Install only production dependencies and set permissions
-RUN npm ci --only=production && \
-    npm cache clean --force && \
-    chown -R appuser:appgroup /app && \
-    chmod -R 555 /app
+# Copy built files from builder
+COPY --from=builder --chown=appuser:appgroup /app/dist /usr/share/nginx/html
 
 # Switch to non-root user
 USER appuser
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4173/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
 
-# Expose the port the app runs on
-EXPOSE 4173
+# Expose port
+EXPOSE 80
 
-# Start the application in preview mode with host exposed
-CMD ["npm", "run", "preview", "--", "--host"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
