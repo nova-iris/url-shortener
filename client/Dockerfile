@@ -24,12 +24,18 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/vite.config.js ./
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+# Copy the entrypoint script from the host, not from the builder stage
+COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh && \
+    # Ensure script has Unix-style line endings (in case of Windows)
+    sed -i 's/\r$//' /docker-entrypoint.sh && \
+    # Verify the script exists and is executable
+    ls -la /docker-entrypoint.sh
 
 # Install only production dependencies and set permissions
 RUN npm ci && \
     npm cache clean --force && \
-    chmod +x /docker-entrypoint.sh && \
     chown -R appuser:appgroup /app
 
 # Switch to non-root user
