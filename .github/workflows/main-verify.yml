@@ -91,16 +91,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Using only one method to trigger the auto-release workflow
       - name: Trigger Auto Release PR workflow
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.PAT }}
-          event-type: trigger-release-workflow
-          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
-
-      - name: Trigger workflow directly
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: Auto Release PR
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
           inputs: '{"trigger_commit": "${{ github.sha }}"}'

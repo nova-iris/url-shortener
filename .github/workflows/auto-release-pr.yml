@@ -58,22 +58,34 @@ jobs:
           echo "Commits since last release:"
           echo "$COMMITS"
           
-          # Determine bump type
-          MAJOR=$(echo "$COMMITS" | grep -c '^feat\!:\|^BREAKING CHANGE')
-          MINOR=$(echo "$COMMITS" | grep -c '^feat:')
-          PATCH=$(echo "$COMMITS" | grep -c '^fix:')
+          # Determine bump type - more robust pattern matching
+          # Check for breaking changes (major version bump)
+          if echo "$COMMITS" | grep -q 'feat\!:\|BREAKING CHANGE\|BREAKING-CHANGE\|breaking change'; then
+            BUMP_TYPE="major"
+          # Check for features (minor version bump)
+          elif echo "$COMMITS" | grep -q '\bfeat\b\|\bfeature\b\|\bfeat:'; then
+            BUMP_TYPE="minor"
+          # Default to patch bump for fixes and other changes
+          else
+            BUMP_TYPE="patch"
+          fi
           
-          echo "Major changes: $MAJOR, Minor changes: $MINOR, Patch changes: $PATCH"
+          echo "Determined bump type: $BUMP_TYPE"
           
           # Extract version number from tag
           VERSION=$(echo $LATEST_TAG | sed 's/v//')
           IFS='.' read -r MAJOR_VERSION MINOR_VERSION PATCH_VERSION <<< "$VERSION"
           
-          # Determine new version
-          if [ "$MAJOR" -gt 0 ]; then
+          # Parse version parts as integers with defaults
+          MAJOR_VERSION=${MAJOR_VERSION:-0}
+          MINOR_VERSION=${MINOR_VERSION:-0}
+          PATCH_VERSION=${PATCH_VERSION:-0}
+          
+          # Determine new version based on bump type
+          if [ "$BUMP_TYPE" = "major" ]; then
             NEW_MAJOR=$((MAJOR_VERSION + 1))
             NEW_VERSION="$NEW_MAJOR.0.0"
-          elif [ "$MINOR" -gt 0 ]; then
+          elif [ "$BUMP_TYPE" = "minor" ]; then
             NEW_MINOR=$((MINOR_VERSION + 1))
             NEW_VERSION="$MAJOR_VERSION.$NEW_MINOR.0"
           else
