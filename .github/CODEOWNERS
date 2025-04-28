@@ -1,0 +1,23 @@
+# Default owners for everything in the repo
+* @nova-iris/maintainers
+* @trongtruong2509
+
+# Frontend code owners
+/client/ @nova-iris/frontend-team
+*.jsx @nova-iris/frontend-team
+*.css @nova-iris/frontend-team
+
+# Backend code owners
+/server/ @nova-iris/backend-team
+*.js @nova-iris/backend-team
+/server/src/models/ @nova-iris/database-team
+
+# DevOps and infrastructure code owners
+/release/ @nova-iris/devops-team
+.github/workflows/ @nova-iris/devops-team
+Dockerfile @nova-iris/devops-team
+docker-compose.yml @nova-iris/devops-team
+
+# Documentation owners
+*.md @nova-iris/docs-team
+CHANGELOG.md @nova-iris/maintainers @nova-iris/docs-team

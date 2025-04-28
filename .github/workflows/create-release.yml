@@ -1,0 +1,58 @@
+name: Create Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+    
+jobs:
+  create-release:
+    # Only run if PR was merged and it was a release PR
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Extract version from branch name
+        id: extract-version
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=$(echo $BRANCH_NAME | sed 's/release\/v//')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+      
+      - name: Create and push tag
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+      
+      - name: Extract changelog for this version
+        id: extract-changelog
+        run: |
+          # Extract release notes section from CHANGELOG.md
+          RELEASE_NOTES=$(awk -v ver="$VERSION" '/^## \[?'"$VERSION"'\]?/ {flag=1; next} /^## \[?[0-9]+\.[0-9]+\.[0-9]+/ {flag=0} flag' CHANGELOG.md)
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$RELEASE_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          name: "Release v${{ env.VERSION }}"
+          body: |
+            ## Release v${{ env.VERSION }}
+            
+            ${{ env.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true

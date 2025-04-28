@@ -5,29 +5,104 @@ set -e
 echo "Starting docker-entrypoint.sh"
 echo "BACKEND_URL=$BACKEND_URL"
 
-# For browser-based access, we need to use a URL accessible from the host
-# If accessing from browser, use host-accessible URL, not Docker container name
-BROWSER_BACKEND_URL=$(echo $BACKEND_URL | sed 's|http://server:5000|http://localhost:5000|g')
-echo "Browser will access backend at: $BROWSER_BACKEND_URL"
+# Use the environment variable without a default value
+RUNTIME_BACKEND_URL=${BACKEND_URL}
 
-# Create a runtime configuration in memory
-echo "window.RUNTIME_CONFIG = { BACKEND_URL: '${BROWSER_BACKEND_URL}' };" > /tmp/config.js
-
-# Copy the config to the dist directory
-if [ -w /app/dist ]; then
-  echo "Copying config to dist directory"
-  cp /tmp/config.js /app/dist/config.js
-  echo "Config file content:"
-  cat /app/dist/config.js
-else
-  echo "WARNING: Dist directory is not writable, config will be served from /tmp"
-  # We'll serve the config from /tmp if necessary
-  mkdir -p /tmp/static
-  cp /tmp/config.js /tmp/static/config.js
-  echo "Config file content:"
-  cat /tmp/static/config.js
+# Check if BACKEND_URL is set
+if [ -z "$RUNTIME_BACKEND_URL" ]; then
+  echo "WARNING: BACKEND_URL environment variable is not set"
+  echo "Please ensure BACKEND_URL is properly configured in your environment"
 fi
 
-# Start the Vite preview server
+# Since we can't modify files in a read-only filesystem, we'll use a different approach
+# Create a temporary directory for our dynamic assets if it doesn't exist
+mkdir -p /tmp/dist
+
+# Create our dynamic runtime configuration
+cat > /tmp/dist/runtime-config.js << EOF
+// Runtime configuration generated at container startup
+window.RUNTIME_CONFIG = {
+    BACKEND_URL: '${RUNTIME_BACKEND_URL}'
+};
+EOF
+
+echo "Runtime config generated:"
+cat /tmp/dist/runtime-config.js
+
+# Start the Vite preview server with custom config to serve our dynamic runtime config
 echo "Starting Vite preview server..."
-exec npm run preview -- --host 0.0.0.0 --port 4173
+export PATH="/app/node_modules/.bin:$PATH"
+
+# Create a simpler approach with plain static file serving
+cat > /tmp/serve-static.js << EOF
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const PORT = process.env.PORT || 4173;
+const DIST_DIR = '/app/dist';
+const CONFIG_PATH = '/tmp/dist/runtime-config.js';
+
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+
+const server = http.createServer((req, res) => {
+  console.log(\`\${new Date().toISOString()} - \${req.method} \${req.url}\`);
+  
+  // Special case for config.js - serve our dynamic runtime config
+  if (req.url === '/config.js') {
+    res.setHeader('Content-Type', 'application/javascript');
+    fs.createReadStream(CONFIG_PATH).pipe(res);
+    return;
+  }
+  
+  // Handle root path
+  let filePath = req.url === '/' 
+    ? path.join(DIST_DIR, 'index.html')
+    : path.join(DIST_DIR, req.url);
+  
+  const extname = path.extname(filePath);
+  let contentType = MIME_TYPES[extname] || 'application/octet-stream';
+  
+  fs.readFile(filePath, (error, content) => {
+    if (error) {
+      if (error.code === 'ENOENT') {
+        // File not found, try index.html for SPA routing
+        fs.readFile(path.join(DIST_DIR, 'index.html'), (err, content) => {
+          if (err) {
+            res.writeHead(500);
+            res.end('Error loading index.html');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(content, 'utf-8');
+        });
+      } else {
+        res.writeHead(500);
+        res.end(\`Server Error: \${error.code}\`);
+      }
+      return;
+    }
+    
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(content, 'utf-8');
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(\`Server running at http://0.0.0.0:\${PORT}/\`);
+});
+EOF
+
+# Execute our simpler static file server that doesn't require Vite at runtime
+cd /app
+exec node /tmp/serve-static.js
