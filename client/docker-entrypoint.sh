@@ -5,8 +5,14 @@ set -e
 echo "Starting docker-entrypoint.sh"
 echo "BACKEND_URL=$BACKEND_URL"
 
-# For Kubernetes, we need to handle potential different service names and configurations
-RUNTIME_BACKEND_URL=${BACKEND_URL:-http://server:5000}
+# Use the environment variable without a default value
+RUNTIME_BACKEND_URL=${BACKEND_URL}
+
+# Check if BACKEND_URL is set
+if [ -z "$RUNTIME_BACKEND_URL" ]; then
+  echo "WARNING: BACKEND_URL environment variable is not set"
+  echo "Please ensure BACKEND_URL is properly configured in your environment"
+fi
 
 # Since we can't modify files in a read-only filesystem, we'll use a different approach
 # Create a temporary directory for our dynamic assets if it doesn't exist

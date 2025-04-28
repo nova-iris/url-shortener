@@ -9,9 +9,13 @@ import axios from 'axios';
 // Use the runtime configuration instead of build-time env variables
 console.log('Runtime config:', window.RUNTIME_CONFIG);
 
-// Get backend URL from runtime config with fallback to default
-const serverBaseUrl = window.RUNTIME_CONFIG?.BACKEND_URL || 'http://localhost:5000';
+// Get backend URL from runtime config without fallback to localhost
+const serverBaseUrl = window.RUNTIME_CONFIG?.BACKEND_URL;
 console.log('Using backend URL:', serverBaseUrl);
+
+if (!serverBaseUrl) {
+    console.error('Backend URL is not configured. Please set BACKEND_URL in environment variables.');
+}
 
 // Configure axios
 axios.defaults.baseURL = serverBaseUrl;
