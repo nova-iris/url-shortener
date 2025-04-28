@@ -79,7 +79,6 @@ services:
     init: true
     restart: unless-stopped
     environment:
-      - VITE_APP_URI=http://server:5000 # This won't affect the built app
       - BACKEND_URL=http://server:5000 # Runtime configuration for backend URL
     ports:
       - "4173:4173"

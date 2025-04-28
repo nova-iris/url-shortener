@@ -82,5 +82,4 @@ client:
           - path: /
             pathType: Prefix
   env:
-    VITE_APP_URI: http://server:5000
     BACKEND_URL: http://url-shortener-server:5000  # Added for runtime configuration
