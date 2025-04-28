@@ -5,7 +5,7 @@ services:
     image: mongo:6.0
     restart: unless-stopped
     env_file:
-      - ../.env
+      - .env
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-IcKeW8b5wxMixE7ByYMkkJ1389/+he4cL7UHi9iEoZc=}
@@ -44,7 +44,7 @@ services:
     init: true
     restart: unless-stopped
     env_file:
-      - ../.env
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-5000}
