@@ -4,8 +4,12 @@ const validUrl = require("valid-url");
 const shortid = require("shortid");
 const { URLModel } = require("../models/url.model");
 const { generateShortId } = require("../utils");
+// Load environment variables
+require('dotenv').config();
 
-const baseUrl = process.env.BASEURI;
+// Get base URL from environment variable with fallback
+const baseUrl = process.env.BASEURI || 'http://localhost:5000';
+console.log(`Using base URL: ${baseUrl}`);
 
 
 const generateUniqueShortId = async () => {

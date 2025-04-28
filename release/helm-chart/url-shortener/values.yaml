@@ -5,32 +5,38 @@ global:
 nameOverride: ""
 fullnameOverride: ""
 
+# Global ingress configuration
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts: []
+
 mongodb:
   enabled: true
   image:
     repository: mongo
     tag: "6.0"
-  resources:
-    limits:
-      cpu: 1000m
-      memory: 1Gi
-    requests:
-      cpu: 500m
-      memory: 512Mi
   persistence:
-    enabled: true
-    size: 10Gi
+    enabled: false
   auth:
     existingSecret: mongodb-credentials
-    userKey: mongo_root_username
-    passwordKey: mongo_root_password
+    userKey: mongodb-root-username
+    passwordKey: mongodb-root-password
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
 
 server:
   name: server
   image:
-    repository: ghcr.io/nova-iris/url-shortener/server
+    repository: url-shortener-server
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Never
   replicaCount: 1
   resources:
     limits:
@@ -54,13 +60,16 @@ server:
     periodSeconds: 30
     timeoutSeconds: 3
     failureThreshold: 3
+  security:
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
 
 client:
   name: client
   image:
-    repository: ghcr.io/nova-iris/url-shortener/client
+    repository: url-shortener-client
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Never
   replicaCount: 1
   resources:
     limits:
@@ -82,4 +91,7 @@ client:
           - path: /
             pathType: Prefix
   env:
-    BACKEND_URL: http://url-shortener-server:5000  # Added for runtime configuration
+    BACKEND_URL: http://url-shortener-server:5000  # Runtime configuration for backend URL
+  security:
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true

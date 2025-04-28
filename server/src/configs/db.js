@@ -1,12 +1,21 @@
 const mongoose = require("mongoose");
-const fs = require("fs");
+// Use dotenv to load environment variables if available
+require('dotenv').config();
 
 const connect = async () => {
     try {
-        const username = encodeURIComponent(fs.readFileSync("/run/secrets/mongo_root_username", "utf8").trim());
-        const password = encodeURIComponent(fs.readFileSync("/run/secrets/mongo_root_password", "utf8").trim());
+        // Get environment variables with fallback values
+        const username = encodeURIComponent(process.env.MONGO_INITDB_ROOT_USERNAME || 'admin');
+        const password = encodeURIComponent(process.env.MONGO_INITDB_ROOT_PASSWORD || '');
+        const host = process.env.MONGODB_HOST || 'mongo';
+        const port = process.env.MONGODB_PORT || '27017';
+        const dbName = process.env.MONGODB_DATABASE || 'urlshortener';
 
-        const uri = `mongodb://${username}:${password}@mongo:27017/urlshortener?authSource=admin`;
+        // Construct the MongoDB connection URI
+        const uri = `mongodb://${username}:${password}@${host}:${port}/${dbName}?authSource=admin`;
+
+        // Log connection attempt (without credentials)
+        console.log(`Connecting to MongoDB at ${host}:${port}/${dbName}`);
 
         await mongoose.connect(uri, {
             useNewUrlParser: true,

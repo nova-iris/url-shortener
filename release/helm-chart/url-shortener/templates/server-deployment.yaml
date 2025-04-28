@@ -63,10 +63,24 @@ spec:
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
           securityContext:
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
+            readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: mongo-credentials
+              mountPath: /run/secrets
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: mongo-credentials
+          secret:
+            secretName: {{ .Values.mongodb.auth.existingSecret }}
+            items:
+            - key: {{ .Values.mongodb.auth.userKey }}
+              path: mongo_root_username
+            - key: {{ .Values.mongodb.auth.passwordKey }}
+              path: mongo_root_password

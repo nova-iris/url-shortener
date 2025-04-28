@@ -1,12 +1,11 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: {{ include "url-shortener.fullname" . }}-mongodb
   labels:
     {{- include "url-shortener.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb
 spec:
-  serviceName: {{ include "url-shortener.fullname" . }}-mongodb
   replicas: 1
   selector:
     matchLabels:
@@ -20,10 +19,12 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
       containers:
         - name: mongodb
           image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
@@ -39,6 +40,16 @@ spec:
             - name: mongodb
               containerPort: 27017
               protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30
           livenessProbe:
             exec:
               command:
@@ -48,6 +59,7 @@ spec:
             initialDelaySeconds: 30
             timeoutSeconds: 5
             periodSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             exec:
               command:
@@ -56,18 +68,31 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 5
             timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 999
           resources:
-            {{- toYaml .Values.mongodb.resources | nindent 12 }}
+            limits:
+              cpu: {{ .Values.mongodb.resources.limits.cpu | default "500m" }}
+              memory: {{ .Values.mongodb.resources.limits.memory | default "512Mi" }}
+            requests:
+              cpu: {{ .Values.mongodb.resources.requests.cpu | default "250m" }}
+              memory: {{ .Values.mongodb.resources.requests.memory | default "256Mi" }}
           volumeMounts:
             - name: data
               mountPath: /data/db
             - name: config
               mountPath: /data/configdb
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: {{ .Values.mongodb.persistence.size }}
+      volumes:
+        - name: data
+          {{- if .Values.mongodb.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "url-shortener.fullname" . }}-mongodb
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          emptyDir: {}

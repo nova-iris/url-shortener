@@ -24,6 +24,9 @@ spec:
         - name: client
           image: "{{ .Values.client.image.repository }}:{{ .Values.client.image.tag }}"
           imagePullPolicy: {{ .Values.client.image.pullPolicy }}
+          env:
+            - name: BACKEND_URL
+              value: {{ .Values.client.env.BACKEND_URL }}
           ports:
             - name: http
               containerPort: 4173
@@ -50,3 +53,9 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

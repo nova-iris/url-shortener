@@ -1,4 +1,3 @@
-
 # URL Shortener Web Application
 
 ## Description
@@ -23,27 +22,41 @@ To run the URL Shortener Web Application locally, follow these steps:
 
 2. Install dependencies for both frontend and backend:
    
-```cd server```
-```npm install```
-```cd client```
-```npm install```
+```
+cd server
+npm install
+cd ../client
+npm install
+```
 
-4. Set up environment variables:
-- Create a `.env` file in the root directory and add the following:
-  ```
-  MONGODB_URI=your-mongodb-uri
-  PORT=your-port-number
-  ```
+3. Run with Docker Compose:
 
-4. Start the development server:
+```bash
+cd release
+cp docker/default.env .env
+cd docker
+docker compose up -d
+```
 
-  -Server ```npm start```
-  -Client ```npm run dev```
+The URL shortener will be running at:
+- Frontend UI: http://localhost:4173
+- Backend API: http://localhost:5000
 
-The URL Shortener Web Application will be running on `http://localhost:your-port-number`.
+## Configuration
+
+The application can be configured using environment variables in the `.env` file located in the `release` directory. A default environment file is provided at `release/docker/default.env`.
+
+```
+NODE_ENV=production
+PORT=5000
+MONGO_INITDB_ROOT_USERNAME=admin
+MONGO_INITDB_ROOT_PASSWORD=your_secure_password
+MONGODB_HOST=mongo
+BASEURI=http://localhost:5000
+```
 
 ## Usage
-1. Access the application at `http://localhost:your-port-number` in your web browser.
+1. Access the application at `http://localhost:4173` in your web browser.
 2. Enter the long URL you want to shorten in the input field.
 3. Optionally, you can provide a custom short URL code for the link.
 4. Click the "Shorten URL" button to generate the shortened version.
@@ -51,19 +64,28 @@ The URL Shortener Web Application will be running on `http://localhost:your-port
 
 ## Technologies Used
 - Frontend:
-- React
-- Chakra UI
-- React Router
-- Axios
+  - React
+  - Chakra UI
+  - React Router
+  - Axios
 
 - Backend:
-- Node.js
-- Express
-- MongoDB (via Mongoose)
+  - Node.js
+  - Express
+  - MongoDB (via Mongoose)
 
-## Deployment
-- Backend: Deployed on [Render](https://render.com)
-- Frontend: Deployed on [Vercel](https://vercel.com)
+- Deployment:
+  - Docker
+  - Docker Compose
+  - Helm (Kubernetes)
+
+## Deployment Options
+
+### Docker Compose
+The simplest way to deploy the application is using Docker Compose. See the [Docker setup README](release/docker/README.md) for detailed instructions.
+
+### Kubernetes with Helm
+For more advanced deployments, a Helm chart is provided. See the [Helm chart README](release/helm-chart/url-shortener/README.md) for details on deploying to Kubernetes.
 
 ## Contributing
 Contributions are welcome! If you find any bugs or have suggestions for improvements, please create a new issue or submit a pull request.
