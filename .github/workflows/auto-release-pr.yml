@@ -1,9 +1,18 @@
 name: Auto Release PR
 
 on:
-  push:
-    branches:
-      - main
+  # Add workflow_dispatch event to allow manual triggering
+  workflow_dispatch:
+    inputs:
+      trigger_commit:
+        description: 'Trigger commit SHA'
+        required: false
+        type: string
+  # Add repository_dispatch for the trigger from main-verify workflow  
+  repository_dispatch:
+    types: [trigger-release-workflow]
+  # Remove direct push trigger to avoid duplicate runs
+  # The workflow will now only run when triggered by main-verify.yml
 
 permissions:
   contents: write
@@ -23,7 +32,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: 'npm'
+          # Removing npm cache since there's no package-lock.json in the root
       
       - name: Install dependencies
         run: |
