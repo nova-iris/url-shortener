@@ -30,7 +30,7 @@ services:
 
   server:
     build:
-      context: ../../server
+      context: ../../src/server
       dockerfile: Dockerfile
       args:
         NODE_ENV: production
@@ -76,7 +76,7 @@ services:
 
   client:
     build:
-      context: ../../client
+      context: ../../src/client
       dockerfile: Dockerfile
     init: true
     restart: unless-stopped
