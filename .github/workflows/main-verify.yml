@@ -5,7 +5,7 @@ on:
     branches:
       - 'main'
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
     branches:
       - 'main'
 
@@ -85,10 +85,8 @@ jobs:
         run: container-structure-test test --image urlshortener-server:test --config ./server/container-structure-tests.yaml --verbosity debug
 
   release-version:
-    # Only run on successful merge to main
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     needs: [verify-client, verify-server]
-    name: "Generate Release Branch"
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -99,13 +97,3 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
           release-type: simple
-          package-name: url-shortener
-          changelog-types: |
-            [
-              {"type":"feat","section":"Features","hidden":false},
-              {"type":"fix","section":"Bug Fixes","hidden":false},
-              {"type":"chore","section":"Miscellaneous","hidden":false},
-              {"type":"docs","section":"Documentation","hidden":false},
-              {"type":"perf","section":"Performance Improvements","hidden":false},
-              {"type":"refactor","section":"Code Refactoring","hidden":false}
-            ]
