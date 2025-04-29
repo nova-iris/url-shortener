@@ -21,7 +21,7 @@ jobs:
       - name: Build client image
         uses: docker/build-push-action@v5
         with:
-          context: ./client
+          context: ./src/client
           load: true
           tags: urlshortener-client:test
           cache-from: type=gha
@@ -58,7 +58,7 @@ jobs:
       - name: Build server image
         uses: docker/build-push-action@v5
         with:
-          context: ./server
+          context: ./src/server
           load: true
           tags: urlshortener-server:test
           cache-from: type=gha
