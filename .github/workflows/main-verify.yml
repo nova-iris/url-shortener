@@ -45,7 +45,7 @@ jobs:
           container-structure-test version
 
       - name: Test client container structure
-        run: container-structure-test test --image urlshortener-client:test --config ./client/container-structure-tests.yaml --verbosity debug
+        run: container-structure-test test --image urlshortener-client:test --config ./src/client/container-structure-tests.yaml --verbosity debug
 
   verify-server:
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
           container-structure-test version
 
       - name: Test server container structure
-        run: container-structure-test test --image urlshortener-server:test --config ./server/container-structure-tests.yaml --verbosity debug
+        run: container-structure-test test --image urlshortener-server:test --config ./src/server/container-structure-tests.yaml --verbosity debug
 
   release-version:
     needs: [verify-client, verify-server]
