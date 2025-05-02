@@ -1,0 +1,89 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-mongo
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "url-shortener.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mongo
+  template:
+    metadata:
+      labels:
+        {{- include "url-shortener.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongo
+    spec:
+      containers:
+        - name: mongodb
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mongodb-secret
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mongodb-secret
+                  key: MONGO_INITDB_ROOT_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+          # resources:
+          #   requests:
+          #     cpu: "500m"
+          #     memory: "512Mi"
+          #   limits:
+          #     cpu: "1.0"
+          #     memory: "1Gi"
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-config
+              mountPath: /data/configdb
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        {{- if .Values.mongodb.persistence.useTemporaryStorage }}
+        - name: mongodb-data
+          emptyDir: {}
+        - name: mongodb-config
+          emptyDir: {}
+        {{- else if .Values.mongodb.persistence.enabled }}
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: {{ include "url-shortener.fullname" . }}-mongodb-data
+        - name: mongodb-config
+          emptyDir: {}
+        {{- else }}
+        - name: mongodb-data
+          emptyDir: {}
+        - name: mongodb-config
+          emptyDir: {}
+        {{- end }}
+{{- end }}

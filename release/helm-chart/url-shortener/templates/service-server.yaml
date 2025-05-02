@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-server
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: {{ if .Values.networking.useIngress }}ClusterIP{{ else }}{{ .Values.server.service.type }}{{ end }}
+  ports:
+    - port: {{ .Values.server.service.port }}
+      targetPort: 5000
+      protocol: TCP
+      name: http
+      {{- if and (not .Values.networking.useIngress) (eq .Values.server.service.type "NodePort") }}
+      nodePort: {{ .Values.server.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "url-shortener.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: server

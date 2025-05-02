@@ -1,0 +1,50 @@
+Thank you for installing {{ .Chart.Name }} chart (version: {{ .Chart.Version }}).
+
+{{- if .Values.networking.useIngress }}
+
+Your URL Shortener application has been deployed with Ingress.
+You can access it using the following URLs:
+
+{{- range .Values.networking.ingress.hosts }}
+  http{{ if $.Values.networking.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- else }}
+
+Your URL Shortener application has been deployed with NodePort.
+Run these commands to access the application:
+
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  
+  Client: http://$NODE_IP:{{ .Values.client.service.nodePort }}
+  Server API: http://$NODE_IP:{{ .Values.server.service.nodePort }}
+
+For Minikube, you can use:
+  
+  minikube service {{ include "url-shortener.fullname" . }}-client -n {{ .Release.Namespace }}
+  minikube service {{ include "url-shortener.fullname" . }}-server -n {{ .Release.Namespace }}
+
+{{- end }}
+
+{{- if .Values.mongodb.persistence.useTemporaryStorage }}
+NOTE: MongoDB is configured to use temporary storage (emptyDir).
+      All data will be lost when the pod is deleted or rescheduled.
+      This is intended for development and testing purposes only.
+{{- end }}
+
+{{- if .Values.image.localImages }}
+
+NOTE: This deployment is using locally built images loaded into Minikube.
+If you need to rebuild the images, you'll need to:
+
+  1. Build the images:
+     docker build -t {{ .Values.server.image.repository }}:{{ .Values.server.image.tag }} ./src/server
+     docker build -t {{ .Values.client.image.repository }}:{{ .Values.client.image.tag }} ./src/client
+     
+  2. Load the images into Minikube:
+     minikube image load {{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}
+     minikube image load {{ .Values.client.image.repository }}:{{ .Values.client.image.tag }}
+
+{{- end }}
+
+Enjoy your URL Shortener application!
