@@ -1,0 +1,17 @@
+{{- if and .Values.mongodb.persistence.enabled (not .Values.mongodb.persistence.useTemporaryStorage) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-mongodb-data
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.mongodb.persistence.storageClass }}
+  storageClassName: {{ .Values.mongodb.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.persistence.size }}
+{{- end }}

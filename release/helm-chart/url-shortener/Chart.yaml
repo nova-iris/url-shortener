@@ -1,0 +1,16 @@
+apiVersion: v2
+name: url-shortener
+description: A Helm chart for URL Shortener application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com
+icon: https://raw.githubusercontent.com/cncf/artwork/master/other/cncf/icon/color/cncf-icon-color.png
+keywords:
+  - url-shortener
+  - mern
+  - nodejs
+  - react
+  - mongodb

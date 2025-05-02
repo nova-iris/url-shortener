@@ -1,0 +1,99 @@
+# Global settings
+nameOverride: ""
+fullnameOverride: ""
+
+# Image settings
+image:
+  # Set to true to use locally loaded images in Minikube
+  localImages: false
+  # Registry settings (used when localImages is false)
+  registry: ghcr.io
+  organization: nova-iris
+
+# Network configuration
+networking:
+  # Set to true to use Ingress, false to use NodePort
+  useIngress: false
+  # Host to use for external access URLs when using NodePort
+  # For Minikube, this would typically be "$(minikube ip)"
+  externalAccessHost: "localhost"
+  ingress:
+    enabled: false
+    className: "nginx"
+    annotations: {}
+    hosts:
+      - host: url-shortener.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+# MongoDB configuration
+mongodb:
+  enabled: true  # Set to false to use an external MongoDB
+  image:
+    repository: mongo
+    tag: "6.0"
+    pullPolicy: IfNotPresent
+  # resources:
+  #   requests:
+  #     cpu: "2m"
+  #     memory: "512Mi"
+  #   limits:
+  #     cpu: "1.0"
+  #     memory: "1Gi"
+  persistence:
+    enabled: true
+    size: "1Gi"
+    storageClass: ""  # Use default storageClass
+    # Set to true to use emptyDir (ephemeral storage)
+    # This will make MongoDB use temporary storage that is lost when the pod is deleted
+    # Useful for development, testing, and CI/CD pipelines
+    useTemporaryStorage: false
+  auth:
+    rootUsername: "admin"
+    rootPassword: "password"  # In production, use a secret
+    database: "urlshortener"
+  service:
+    type: ClusterIP
+    port: 27017
+
+# Server (backend) configuration
+server:
+  image:
+    repository: "urlshortener-server"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  service:
+    type: NodePort
+    port: 5000
+    nodePort: 30500  # Used when type is NodePort
+  env:
+    NODE_ENV: "production"
+
+# Client (frontend) configuration
+client:
+  image:
+    repository: "urlshortener-client"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "150m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  service:
+    type: NodePort
+    port: 4173
+    nodePort: 30173  # Used when type is NodePort
