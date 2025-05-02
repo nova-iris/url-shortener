@@ -86,6 +86,34 @@ docker compose up -d
    - Frontend: http://localhost:4173
    - Backend API: http://localhost:5000
 
+### Option 3: Kubernetes with Helm Chart
+
+For Kubernetes deployment, we provide a Helm chart:
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/nova-iris/url-shortener.git
+cd url-shortener
+```
+
+2. Install the Helm chart:
+
+```bash
+helm install my-url-shortener ./release/helm-chart/url-shortener
+```
+
+3. For production with Ingress:
+
+```bash
+helm install my-url-shortener ./release/helm-chart/url-shortener \
+  --set networking.useIngress=true \
+  --set networking.ingress.enabled=true \
+  --set networking.ingress.hosts[0].host=url-shortener.example.com
+```
+
+For detailed Helm installation and configuration instructions, see the [Helm Chart README](./release/helm-chart/url-shortener/README.md).
+
 ### Docker Container Information
 
 The application consists of three services:
@@ -102,26 +130,11 @@ Each container includes health checks, security hardening, and proper user permi
 4. Click the "Shorten URL" button to generate the shortened version.
 5. The shortened URL will be displayed in the output field, and it will be automatically copied to your clipboard for easy sharing.
 
-## Technologies Used
-- **Frontend**:
-  - React
-  - Chakra UI
-  - React Router
-  - Axios
-
-- **Backend**:
-  - Node.js
-  - Express
-  - MongoDB (via Mongoose)
-  
-- **DevOps**:
-  - Docker & Docker Compose
-  - GitHub Actions CI/CD
-
 ## Deployment
 - **Containerized Deployment**:
   - The application is packaged as Docker containers
   - Deployment-ready with Docker Compose
+  - Kubernetes-ready with Helm charts
 
 - **Alternative Platforms**:
   - Backend: [Render](https://render.com)
@@ -131,4 +144,4 @@ Each container includes health checks, security hardening, and proper user permi
 Contributions are welcome! If you find any bugs or have suggestions for improvements, please create a new issue or submit a pull request.
 
 ## Contact
-For any inquiries or questions, feel free to reach out via [email](mailto:akshaysinghr98@gmail.com) or connect with me on [LinkedIn](https://www.linkedin.com/in/akshay-kumar046203/).
+For any inquiries or questions, feel free to reach out via [email](mailto:trongtruong2509@gmail.com).
