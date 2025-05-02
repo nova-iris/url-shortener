@@ -5,6 +5,14 @@
 
 ### Features
 
+* update helm-chart ([8c7bfb7](https://github.com/nova-iris/url-shortener/commit/8c7bfb7b7f6b93a70aa11a7384bdc185a5066272))
+* update helm-chart ([bd53d01](https://github.com/nova-iris/url-shortener/commit/bd53d01661b5517886fdd9f691a09801eabf7aba))
+
+## [1.2.0](https://github.com/nova-iris/url-shortener/compare/v1.1.0...v1.2.0) (2025-05-02)
+
+
+### Features
+
 * added Helm chart for Kubernetes deployment ([e8c45ab](https://github.com/nova-iris/url-shortener/commit/e8c45abf1d2a3e7c8f9b5e2a0d3c1f406d7f8b23))
 * improved Docker Compose support with documentation ([f9d72c3](https://github.com/nova-iris/url-shortener/commit/f9d72c3597e6a8b234f5c7d8a9e1b2c384f7a635))
 
