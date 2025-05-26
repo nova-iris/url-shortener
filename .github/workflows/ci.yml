@@ -15,7 +15,7 @@ jobs:
         component: [client, server]
     defaults:
       run:
-        working-directory: ./${{ matrix.component }}
+        working-directory: ./src/${{ matrix.component }}
 
     steps:
     - name: Checkout code
@@ -24,9 +24,9 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
+        node-version: '23.11.1'
         cache: 'npm'
-        cache-dependency-path: ${{ matrix.component }}/package-lock.json
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
@@ -48,7 +48,7 @@ jobs:
         component: [client, server]
     defaults:
       run:
-        working-directory: ./${{ matrix.component }}
+        working-directory: ./src/${{ matrix.component }}
 
     services:
       mongodb:
@@ -63,9 +63,9 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
+        node-version: '23.11.1'
         cache: 'npm'
-        cache-dependency-path: ${{ matrix.component }}/package-lock.json
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
@@ -84,7 +84,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.component }}-coverage
-        path: ${{ matrix.component }}/coverage/
+        path: src/${{ matrix.component }}/coverage/
 
   container-security:
     name: Container Build & Security
@@ -95,7 +95,7 @@ jobs:
         component: [client, server]
     defaults:
       run:
-        working-directory: ./${{ matrix.component }}
+        working-directory: ./src/${{ matrix.component }}
 
     steps:
     - name: Checkout code
@@ -104,9 +104,9 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
+        node-version: '23.11.1'
         cache: 'npm'
-        cache-dependency-path: ${{ matrix.component }}/package-lock.json
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
@@ -134,7 +134,7 @@ jobs:
     - name: Build Docker image
       uses: docker/build-push-action@v4
       with:
-        context: ./${{ matrix.component }}
+        context: ./src/${{ matrix.component }}
         push: false
         tags: ghcr.io/nova-iris/urlshortener-${{ matrix.component }}:${{ github.sha }}
         cache-from: type=local,src=/tmp/.buildx-cache
@@ -160,7 +160,7 @@ jobs:
     - name: Verify Dockerfile best practices
       uses: hadolint/hadolint-action@v3
       with:
-        dockerfile: ${{ matrix.component }}/Dockerfile
+        dockerfile: src/${{ matrix.component }}/Dockerfile
         failure-threshold: warning
 
   e2e-tests:
