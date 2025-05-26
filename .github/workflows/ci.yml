@@ -93,12 +93,12 @@ jobs:
     - name: Run tests
       run: npm test || echo "Tests not configured, skipping"
 
-    - name: Upload coverage reports
-      if: success()
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.component }}-coverage
-        path: src/${{ matrix.component }}/coverage/
+    # - name: Upload coverage reports
+    #   if: success()
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: ${{ matrix.component }}-coverage
+    #     path: src/${{ matrix.component }}/coverage/
 
   container-security:
     name: Container Build & Security
