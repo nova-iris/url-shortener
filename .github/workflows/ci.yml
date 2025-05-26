@@ -104,7 +104,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '23'
+        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
         cache: 'npm'
         cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
