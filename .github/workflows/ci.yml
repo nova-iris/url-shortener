@@ -171,11 +171,9 @@ jobs:
         vuln-type: 'os,library'
         severity: 'CRITICAL,HIGH'
 
-    - name: Verify Dockerfile best practices
-      uses: hadolint/hadolint-action@v3
-      with:
-        dockerfile: src/${{ matrix.component }}/Dockerfile
-        failure-threshold: warning
+    - name: Lint Dockerfile
+      run: |
+        docker run --rm -i hadolint/hadolint < src/${{ matrix.component }}/Dockerfile
 
   e2e-tests:
     name: End-to-End Tests
