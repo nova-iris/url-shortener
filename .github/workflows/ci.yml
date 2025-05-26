@@ -1,18 +1,14 @@
-name: CI
+name: CI Pipeline
 
 on:
+  pull_request:
+    branches: [ main, develop ]
   push:
-    branches:
-      - '*'
-      - '!main'  # Main branch has its own workflow
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - '.github/workflows/**'
-      - 'release/**'
+    branches: [ main, develop ]
 
 jobs:
-  lint-test:
+  code-quality:
+    name: Code Quality & Static Analysis
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -28,7 +24,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
+        node-version: '23'
         cache: 'npm'
         cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
@@ -36,74 +32,68 @@ jobs:
       run: npm ci
 
     - name: Lint code
-      run: npm run lint || echo "Linting not configured, skipping"
+      run: npm run lint
 
-    - name: Run tests
-      run: npm test || echo "Tests not configured, skipping"
+    - name: Type check
+      run: npm run type-check || echo "Type checking not configured, skipping"
 
-  build-client:
+    - name: Format check
+      run: npm run format:check || echo "Format checking not configured, skipping"
+
+  build-and-audit:
+    name: Build & Dependencies
     runs-on: ubuntu-latest
-    needs: lint-test
+    strategy:
+      matrix:
+        component: [client, server]
     defaults:
       run:
-        working-directory: ./client
+        working-directory: ./${{ matrix.component }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-      
+
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '23'
         cache: 'npm'
-        cache-dependency-path: './client/package-lock.json'
+        cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
 
-    - name: Build client
-      run: npm run build
-      
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-      
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-client-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-client-
+    - name: Check outdated dependencies
+      run: npm outdated || true
 
-    - name: Build and tag Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: ./client
-        push: false
-        tags: ghcr.io/nova-iris/urlshortener-client:${{ github.sha }}
-        cache-from: type=local,src=/tmp/.buildx-cache
-        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-        load: true
-        
-    - name: Move cache
-      run: |
-        rm -rf /tmp/.buildx-cache
-        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-      working-directory: /
-      
-    - name: Archive build artifacts
+    - name: Security audit
+      run: npm audit --audit-level=high
+
+    - name: Build
+      run: npm run build
+
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: client-dist
-        path: ./client/dist/
+        name: ${{ matrix.component }}-dist
+        path: ${{ matrix.component }}/dist/
 
-  build-server:
+  test:
+    name: Testing
     runs-on: ubuntu-latest
-    needs: lint-test
+    strategy:
+      matrix:
+        component: [client, server]
     defaults:
       run:
-        working-directory: ./server
+        working-directory: ./${{ matrix.component }}
+
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
 
     steps:
     - name: Checkout code
@@ -112,104 +102,116 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '16'
+        node-version: '23'
         cache: 'npm'
-        cache-dependency-path: 'server/package-lock.json'
+        cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
-      
+
+    - name: Run unit tests
+      run: npm run test:unit
+      env:
+        MONGODB_URI: mongodb://localhost:27017/test
+
+    - name: Run integration tests
+      run: npm run test:integration
+      env:
+        MONGODB_URI: mongodb://localhost:27017/test
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.component }}-coverage
+        path: ${{ matrix.component }}/coverage/
+
+  container-security:
+    name: Container Build & Security
+    runs-on: ubuntu-latest
+    needs: [build-and-audit, test]
+    strategy:
+      matrix:
+        component: [client, server]
+    defaults:
+      run:
+        working-directory: ./${{ matrix.component }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
-      
+
     - name: Cache Docker layers
       uses: actions/cache@v3
       with:
         path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-server-${{ github.sha }}
+        key: ${{ runner.os }}-buildx-${{ matrix.component }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-buildx-server-
+          ${{ runner.os }}-buildx-${{ matrix.component }}-
 
-    - name: Build and tag Docker image
+    - name: Build Docker image
       uses: docker/build-push-action@v4
       with:
-        context: ./server
+        context: ./${{ matrix.component }}
         push: false
-        tags: ghcr.io/nova-iris/urlshortener-server:${{ github.sha }}
+        tags: ghcr.io/nova-iris/urlshortener-${{ matrix.component }}:${{ github.sha }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
         load: true
-        
+
     - name: Move cache
       run: |
         rm -rf /tmp/.buildx-cache
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
       working-directory: /
 
-  validate-helm-chart:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Set up Helm
-      uses: azure/setup-helm@v3
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
       with:
-        version: 'latest'
-        
-    - name: Lint Helm chart
-      run: helm lint ./release/helm-chart/url-shortener
-      
-    - name: Validate Helm chart
-      run: helm template ./release/helm-chart/url-shortener
-      
-  validate-docker-compose:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Install docker-compose-validator
-      run: |
-        npm install -g docker-compose-validator
-        
-    - name: Validate docker-compose.yml
-      run: |
-        docker-compose-validator ./release/docker/docker-compose.yml
-        
+        image-ref: ghcr.io/nova-iris/urlshortener-${{ matrix.component }}:${{ github.sha }}
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Verify Dockerfile best practices
+      uses: hadolint/hadolint-action@v3
+      with:
+        dockerfile: ${{ matrix.component }}/Dockerfile
+        failure-threshold: warning
+
   e2e-tests:
+    name: End-to-End Tests
     runs-on: ubuntu-latest
-    needs: [build-client, build-server]
-    if: github.ref != 'refs/heads/main'
+    needs: [container-security]
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-      
-    - name: Set up Docker Compose
-      run: |
-        docker compose --version
-        
+
     - name: Download client artifact
       uses: actions/download-artifact@v3
       with:
         name: client-dist
         path: ./client/dist/
-        
+
     - name: Start services
       run: |
         cd ./release/docker
         docker compose up -d
-        
+
     - name: Wait for services
       run: |
         sleep 30
-        
+
     - name: Run e2e tests
       run: |
-        echo "Running e2e tests..." 
+        echo "Running e2e tests..."
         # This is a placeholder for actual e2e tests
         curl -s http://localhost:5000/health | grep -q "ok"
-        
+
     - name: Cleanup
       if: always()
       run: |
