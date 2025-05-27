@@ -132,6 +132,7 @@ jobs:
       run: npm audit --audit-level=high
 
     - name: Build application
+      if: matrix.component == 'client'
       run: npm run build
 
     - name: Set up Docker Buildx
