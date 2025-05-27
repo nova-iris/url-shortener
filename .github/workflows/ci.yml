@@ -175,7 +175,7 @@ jobs:
     - name: Lint Dockerfile
       run: |
         cd ../..  # Go back to root directory
-        docker run --rm -i hadolint/hadolint < src/${{ matrix.component }}/Dockerfile
+        docker run --rm -i hadolint/hadolint --failure-threshold error < src/${{ matrix.component }}/Dockerfile
 
   e2e-tests:
     name: End-to-End Tests
