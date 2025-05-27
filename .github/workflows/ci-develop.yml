@@ -7,6 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  ENV: develop
 
 jobs:
   build-and-push:
@@ -35,8 +36,8 @@ jobs:
           file: ./src/${{ matrix.component }}/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:develop
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ env.ENV }}/${{ matrix.component }}:${{ env.ENV }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ env.ENV }}/${{ matrix.component }}:${{ github.sha }}
 
   # notify:
   #   needs: build-and-push
