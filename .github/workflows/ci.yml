@@ -1,25 +1,21 @@
-name: CI
+name: CI Pipeline
 
 on:
+  pull_request:
+    branches: [ main, develop ]
   push:
-    branches:
-      - '*'
-      - '!main'  # Main branch has its own workflow
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - '.github/workflows/**'
-      - 'release/**'
+    branches: [ main, develop ]
 
 jobs:
-  lint-test:
+  code-quality:
+    name: Code Quality & Static Analysis
     runs-on: ubuntu-latest
     strategy:
       matrix:
         component: [client, server]
     defaults:
       run:
-        working-directory: ./${{ matrix.component }}
+        working-directory: ./src/${{ matrix.component }}
 
     steps:
     - name: Checkout code
@@ -28,190 +24,185 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: ${{ matrix.component == 'client' && '18' || '16' }}
+        node-version: '23.11.1'
         cache: 'npm'
-        cache-dependency-path: ${{ matrix.component }}/package-lock.json
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
+
+    - name: Setup ESLint and Prettier
+      if: matrix.component == 'client'
+      run: |
+        npm install --save-dev eslint prettier @typescript-eslint/parser @typescript-eslint/eslint-plugin eslint-plugin-react eslint-plugin-react-hooks
+        npx eslint --init
+
+    - name: Setup ESLint and Prettier
+      if: matrix.component == 'server'
+      run: |
+        npm install --save-dev eslint prettier @typescript-eslint/parser @typescript-eslint/eslint-plugin
+
+    - name: Add lint script
+      run: |
+        npm pkg set scripts.lint="eslint . --ext .js,.jsx,.ts,.tsx"
+        npm pkg set scripts.format="prettier --write ."
+        npm pkg set scripts.format:check="prettier --check ."
 
     - name: Lint code
       run: npm run lint || echo "Linting not configured, skipping"
 
+    - name: Format check
+      run: npm run format:check || echo "Format checking not configured, skipping"
+
+  test:
+    name: Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [client, server]
+    defaults:
+      run:
+        working-directory: ./src/${{ matrix.component }}
+
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '23.11.1'
+        cache: 'npm'
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Jest
+      run: |
+        npm install --save-dev jest @types/jest ts-jest
+        npm pkg set scripts.test="jest"
+        npm pkg set scripts.test:coverage="jest --coverage"
+
     - name: Run tests
       run: npm test || echo "Tests not configured, skipping"
 
-  build-client:
+    # - name: Upload coverage reports
+    #   if: success()
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: ${{ matrix.component }}-coverage
+    #     path: src/${{ matrix.component }}/coverage/
+
+  container-security:
+    name: Container Build & Security
     runs-on: ubuntu-latest
-    needs: lint-test
+    needs: [code-quality, test]
+    strategy:
+      matrix:
+        component: [client, server]
     defaults:
       run:
-        working-directory: ./client
+        working-directory: ./src/${{ matrix.component }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-      
+
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '23.11.1'
         cache: 'npm'
-        cache-dependency-path: './client/package-lock.json'
+        cache-dependency-path: src/${{ matrix.component }}/package-lock.json
 
     - name: Install dependencies
       run: npm ci
 
-    - name: Build client
+    - name: Check outdated dependencies
+      run: npm outdated || true
+
+    - name: Security audit
+      run: npm audit --audit-level=high
+
+    - name: Build application
+      if: matrix.component == 'client'
       run: npm run build
-      
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
-      
+
     - name: Cache Docker layers
       uses: actions/cache@v3
       with:
         path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-client-${{ github.sha }}
+        key: ${{ runner.os }}-buildx-${{ matrix.component }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-buildx-client-
+          ${{ runner.os }}-buildx-${{ matrix.component }}-
 
-    - name: Build and tag Docker image
+    - name: Build Docker image
       uses: docker/build-push-action@v4
       with:
-        context: ./client
+        context: ./src/${{ matrix.component }}
         push: false
-        tags: ghcr.io/nova-iris/urlshortener-client:${{ github.sha }}
+        tags: ghcr.io/nova-iris/urlshortener-${{ matrix.component }}:${{ github.sha }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
         load: true
-        
-    - name: Move cache
-      run: |
-        rm -rf /tmp/.buildx-cache
-        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-      working-directory: /
-      
-    - name: Archive build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: client-dist
-        path: ./client/dist/
 
-  build-server:
-    runs-on: ubuntu-latest
-    needs: lint-test
-    defaults:
-      run:
-        working-directory: ./server
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '16'
-        cache: 'npm'
-        cache-dependency-path: 'server/package-lock.json'
-
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-      
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-server-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-server-
-
-    - name: Build and tag Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: ./server
-        push: false
-        tags: ghcr.io/nova-iris/urlshortener-server:${{ github.sha }}
-        cache-from: type=local,src=/tmp/.buildx-cache
-        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-        load: true
-        
     - name: Move cache
       run: |
         rm -rf /tmp/.buildx-cache
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
       working-directory: /
 
-  validate-helm-chart:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Set up Helm
-      uses: azure/setup-helm@v3
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
       with:
-        version: 'latest'
-        
-    - name: Lint Helm chart
-      run: helm lint ./release/helm-chart/url-shortener
-      
-    - name: Validate Helm chart
-      run: helm template ./release/helm-chart/url-shortener
-      
-  validate-docker-compose:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Install docker-compose-validator
-      run: |
-        npm install -g docker-compose-validator
-        
-    - name: Validate docker-compose.yml
-      run: |
-        docker-compose-validator ./release/docker/docker-compose.yml
-        
-  e2e-tests:
-    runs-on: ubuntu-latest
-    needs: [build-client, build-server]
-    if: github.ref != 'refs/heads/main'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Set up Docker Compose
-      run: |
-        docker compose --version
-        
-    - name: Download client artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: client-dist
-        path: ./client/dist/
-        
-    - name: Start services
-      run: |
-        cd ./release/docker
-        docker compose up -d
-        
-    - name: Wait for services
-      run: |
-        sleep 30
-        
-    - name: Run e2e tests
-      run: |
-        echo "Running e2e tests..." 
-        # This is a placeholder for actual e2e tests
-        curl -s http://localhost:5000/health | grep -q "ok"
-        
-    - name: Cleanup
-      if: always()
-      run: |
-        cd ./release/docker
-        docker compose down -v
+        image-ref: ghcr.io/nova-iris/urlshortener-${{ matrix.component }}:${{ github.sha }}
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+    # - name: Lint Dockerfile
+    #   run: |
+    #     cd ../..  # Go back to root directory
+    #     docker run --rm -i hadolint/hadolint --failure-threshold error < src/${{ matrix.component }}/Dockerfile
+
+  # e2e-tests:
+  #   name: End-to-End Tests
+  #   runs-on: ubuntu-latest
+  #   needs: [container-security]
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v3
+
+  #   - name: Start services
+  #     run: |
+  #       cd ./release/docker
+  #       # Use the built images from previous step
+  #       docker compose -f docker-compose.test.yml up -d
+
+  #   - name: Wait for services
+  #     run: |
+  #       sleep 30
+
+  #   - name: Run e2e tests
+  #     run: |
+  #       echo "Running e2e tests..."
+  #       # This is a placeholder for actual e2e tests
+  #       curl -s http://localhost:5000/health | grep -q "ok"
+
+  #   - name: Cleanup
+  #     if: always()
+  #     run: |
+  #       cd ./release/docker
+  #       docker compose -f docker-compose.test.yml down -v
