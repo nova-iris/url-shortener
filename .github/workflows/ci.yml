@@ -1,10 +1,10 @@
-name: CI Pipeline
+name: CI for PR to Develop
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [ develop ]
   push:
-    branches: [ main, develop ]
+    branches: [ develop ]
 
 jobs:
   code-quality:
