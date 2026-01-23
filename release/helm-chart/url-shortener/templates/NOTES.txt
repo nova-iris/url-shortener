@@ -26,8 +26,8 @@ For Minikube, you can use:
 
 {{- end }}
 
-{{- if .Values.mongodb.persistence.useTemporaryStorage }}
-NOTE: MongoDB is configured to use temporary storage (emptyDir).
+{{- if .Values.mariadb.persistence.useTemporaryStorage }}
+NOTE: MariaDB is configured to use temporary storage (emptyDir).
       All data will be lost when the pod is deleted or rescheduled.
       This is intended for development and testing purposes only.
 {{- end }}
