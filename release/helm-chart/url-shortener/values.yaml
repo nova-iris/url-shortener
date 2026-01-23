@@ -28,16 +28,18 @@ networking:
             pathType: Prefix
     tls: []
 
-# MongoDB configuration
-mongodb:
-  enabled: true  # Set to false to use an external MongoDB
+# MariaDB configuration
+mariadb:
+  # Set to true to deploy MariaDB in the cluster
+  # Set to false to use an external database
+  enabled: true
   image:
-    repository: mongo
-    tag: "6.0"
+    repository: mariadb
+    tag: "11.2"
     pullPolicy: IfNotPresent
   # resources:
   #   requests:
-  #     cpu: "2m"
+  #     cpu: "500m"
   #     memory: "512Mi"
   #   limits:
   #     cpu: "1.0"
@@ -47,16 +49,29 @@ mongodb:
     size: "1Gi"
     storageClass: ""  # Use default storageClass
     # Set to true to use emptyDir (ephemeral storage)
-    # This will make MongoDB use temporary storage that is lost when the pod is deleted
+    # This will make MariaDB use temporary storage that is lost when the pod is deleted
     # Useful for development, testing, and CI/CD pipelines
     useTemporaryStorage: false
   auth:
-    rootUsername: "admin"
-    rootPassword: "password"  # In production, use a secret
+    rootPassword: "rootpassword"  # In production, use a secret
     database: "urlshortener"
+    username: "urlshortener"
+    password: "urlshortener_password"  # In production, use a secret
   service:
     type: ClusterIP
-    port: 27017
+    port: 3306
+  # Connection pool settings
+  poolMax: 10
+
+# External database configuration (used when mariadb.enabled is false)
+externalDatabase:
+  host: ""
+  port: 3306
+  database: "urlshortener"
+  username: "urlshortener"
+  password: ""  # Use existingSecret in production
+  # existingSecret: ""
+  # existingSecretPasswordKey: "password"
 
 # Server (backend) configuration
 server:

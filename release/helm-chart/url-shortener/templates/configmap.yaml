@@ -7,12 +7,20 @@ metadata:
 data:
   NODE_ENV: {{ .Values.server.env.NODE_ENV | quote }}
   PORT: "5000"
-  MONGODB_HOST: {{ include "url-shortener.fullname" . }}-mongo
-  MONGODB_PORT: "27017"
-  MONGODB_DATABASE: {{ .Values.mongodb.auth.database | quote }}
+  {{- if .Values.mariadb.enabled }}
+  DB_HOST: {{ include "url-shortener.fullname" . }}-mariadb
+  DB_PORT: "3306"
+  DB_NAME: {{ .Values.mariadb.auth.database | quote }}
+  DB_POOL_MAX: {{ .Values.mariadb.poolMax | quote }}
+  {{- else }}
+  DB_HOST: {{ .Values.externalDatabase.host | quote }}
+  DB_PORT: {{ .Values.externalDatabase.port | quote }}
+  DB_NAME: {{ .Values.externalDatabase.database | quote }}
+  DB_POOL_MAX: "10"
+  {{- end }}
   # Generate appropriate backend URL based on deployment type
   {{- if .Values.networking.useIngress }}
   BACKEND_PUBLIC_URL: {{ printf "http://%s" (index .Values.networking.ingress.hosts 0).host | quote }}
   {{- else }}
-  BACKEND_PUBLIC_URL: {{ printf "http://%s:%d" .Values.externalAccessHost (int .Values.server.service.nodePort) | quote }}
+  BACKEND_PUBLIC_URL: {{ printf "http://%s:%d" .Values.networking.externalAccessHost (int .Values.server.service.nodePort) | quote }}
   {{- end }}
