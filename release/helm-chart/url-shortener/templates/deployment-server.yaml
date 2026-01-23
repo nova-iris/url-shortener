@@ -30,16 +30,49 @@ spec:
               value: {{ .Values.server.env.NODE_ENV | quote }}
             - name: PORT
               value: "5000"
-            - name: MONGO_INITDB_ROOT_USERNAME
-              value: {{ .Values.mongodb.auth.rootUsername | quote }}
-            - name: MONGO_INITDB_ROOT_PASSWORD
-              value: {{ .Values.mongodb.auth.rootPassword | quote }}
-            - name: MONGODB_HOST
-              value: {{ include "url-shortener.fullname" . }}-mongo
-            - name: MONGODB_PORT
-              value: "27017"
-            - name: MONGODB_DATABASE
-              value: {{ .Values.mongodb.auth.database | quote }}
+            {{- if .Values.mariadb.enabled }}
+            - name: DB_HOST
+              value: {{ include "url-shortener.fullname" . }}-mariadb
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mariadb-secret
+                  key: database
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mariadb-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mariadb-secret
+                  key: password
+            - name: DB_POOL_MAX
+              value: {{ .Values.mariadb.poolMax | quote }}
+            {{- else }}
+            - name: DB_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: DB_USER
+              value: {{ .Values.externalDatabase.username | quote }}
+            - name: DB_PASSWORD
+              {{- if .Values.externalDatabase.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretPasswordKey | default "password" }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.password | quote }}
+              {{- end }}
+            - name: DB_POOL_MAX
+              value: "10"
+            {{- end }}
             - name: BASEURI
               {{- if .Values.networking.useIngress }}
               value: {{ printf "http://%s" (index .Values.networking.ingress.hosts 0).host | quote }}

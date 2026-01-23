@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const connect = require("./configs/db");
+const { connect, close } = require("./configs/db");
 const urlRouter = require("./controllers/url.controller");
 const redirectRouter = require("./controllers/redirects.controller");
 
@@ -50,23 +50,54 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 5000;
+let server;
 
-// Graceful shutdown handling
-const server = app.listen(port, () => {
-    console.log(`${new Date().toISOString()} - Server is running on port ${port}`);
-});
+// Start server after database connection
+const startServer = async () => {
+    try {
+        // Connect to database and initialize schema
+        await connect();
 
-// Handle MongoDB connection
-connect().catch(err => {
-    console.error(`${new Date().toISOString()} - Database connection error:`, err);
-    process.exit(1);
-});
+        // Start listening
+        server = app.listen(port, () => {
+            console.log(`${new Date().toISOString()} - Server is running on port ${port}`);
+        });
+    } catch (err) {
+        console.error(`${new Date().toISOString()} - Failed to start server:`, err);
+        process.exit(1);
+    }
+};
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
-    console.log(`${new Date().toISOString()} - SIGTERM signal received. Closing server...`);
-    server.close(() => {
-        console.log(`${new Date().toISOString()} - Server closed.`);
+const gracefulShutdown = async (signal) => {
+    console.log(`${new Date().toISOString()} - ${signal} signal received. Closing server...`);
+
+    if (server) {
+        // Set a timeout for forceful shutdown
+        const shutdownTimeout = setTimeout(() => {
+            console.log(`${new Date().toISOString()} - Forceful shutdown due to timeout`);
+            process.exit(1);
+        }, 30000); // 30 seconds timeout
+
+        server.close(async () => {
+            clearTimeout(shutdownTimeout);
+            console.log(`${new Date().toISOString()} - HTTP server closed.`);
+            try {
+                await close();
+                console.log(`${new Date().toISOString()} - Database connection closed.`);
+                process.exit(0);
+            } catch (err) {
+                console.error(`${new Date().toISOString()} - Error during shutdown:`, err);
+                process.exit(1);
+            }
+        });
+    } else {
         process.exit(0);
-    });
-});
+    }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Start the server
+startServer();

@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const validUrl = require("valid-url");
-const shortid = require("shortid");
 const { URLModel } = require("../models/url.model");
 const { generateShortId } = require("../utils");
 
@@ -23,7 +22,7 @@ const generateUniqueShortId = async () => {
 
     while (attempts < MAX_ATTEMPTS) {
         shortId = generateShortId();
-        existingURL = await URLModel.findOne({ urlCode: shortId });
+        existingURL = await URLModel.findByCode(shortId);
 
         if (!existingURL) {
             return shortId;
@@ -60,14 +59,14 @@ router.post("/shorten", asyncHandler(async (req, res) => {
         }
 
         // Check if code is already in use
-        const existingCodeBookmark = await URLModel.findOne({ urlCode });
+        const existingCodeBookmark = await URLModel.findByCode(urlCode);
         if (existingCodeBookmark) {
             throw new HttpError(`Code "${urlCode}" already in use. Please choose a different code.`, 400);
         }
     }
 
     // Check for existing URL to avoid duplicates
-    const existingURL = await URLModel.findOne({ longUrl });
+    const existingURL = await URLModel.findByLongUrl(longUrl);
     if (existingURL && !urlCode) {
         return res.json({
             urlCode: existingURL.urlCode,
@@ -81,18 +80,15 @@ router.post("/shorten", asyncHandler(async (req, res) => {
     const shortUrl = `${baseUrl}/${generatedCode}`;
 
     // Create new shortened URL
-    const newURL = new URLModel({
+    const newURL = await URLModel.create({
         urlCode: generatedCode,
         longUrl,
         shortUrl,
-        createdAt: new Date()
     });
 
-    await newURL.save();
-
     res.status(201).json({
-        urlCode: generatedCode,
-        shortUrl: shortUrl,
+        urlCode: newURL.urlCode,
+        shortUrl: newURL.shortUrl,
         isExisting: false
     });
 }));
@@ -101,14 +97,8 @@ router.post("/shorten", asyncHandler(async (req, res) => {
 router.get("/", asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
 
-    const urls = await URLModel.find({})
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
-
-    const total = await URLModel.countDocuments();
+    const { urls, total } = await URLModel.findAll({ page, limit });
 
     res.json({
         urls,
