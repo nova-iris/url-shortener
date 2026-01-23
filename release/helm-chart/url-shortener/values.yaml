@@ -93,6 +93,63 @@ server:
     nodePort: 30500  # Used when type is NodePort
   env:
     NODE_ENV: "production"
+    LOG_LEVEL: "info"  # Logging level: error, warn, info, debug
+
+# Observability configuration
+observability:
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    # Prometheus annotations for service discovery
+    serviceMonitor:
+      enabled: false  # Set to true if using Prometheus Operator
+      interval: 30s
+      scrapeTimeout: 10s
+  
+  # Distributed tracing with Jaeger
+  tracing:
+    enabled: false  # Set to true to enable OpenTelemetry tracing
+    samplingRate: "0.1"  # 10% sampling in production
+    jaeger:
+      # Deploy Jaeger in the cluster
+      deploy: false
+      image:
+        repository: jaegertracing/all-in-one
+        tag: "1.54"
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      service:
+        type: ClusterIP
+        # OTLP HTTP port
+        otlpHttpPort: 4318
+        # Jaeger UI port
+        uiPort: 16686
+      # External Jaeger endpoint (used when deploy is false)
+      externalEndpoint: ""
+
+  # MariaDB metrics exporter
+  mariadbExporter:
+    enabled: false
+    image:
+      repository: prom/mysqld-exporter
+      tag: "v0.15.1"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+    service:
+      type: ClusterIP
+      port: 9104
 
 # Client (frontend) configuration
 client:

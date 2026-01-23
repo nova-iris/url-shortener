@@ -3,6 +3,8 @@ const router = express.Router();
 const validUrl = require("valid-url");
 const { URLModel } = require("../models/url.model");
 const { generateShortId } = require("../utils");
+const { metrics } = require("../observability/metrics");
+const { logger } = require("../observability/logger");
 
 const baseUrl = process.env.BASEURI;
 
@@ -27,6 +29,8 @@ const generateUniqueShortId = async () => {
         if (!existingURL) {
             return shortId;
         }
+        // Track collision metrics
+        metrics.shortIdCollisions.inc();
         attempts++;
     }
 
@@ -43,11 +47,13 @@ router.post("/shorten", asyncHandler(async (req, res) => {
 
     // Validate required fields
     if (!longUrl) {
+        metrics.urlValidationErrors.inc({ reason: 'missing_url' });
         throw new HttpError("URL is required", 400);
     }
 
     // Validate URL format
     if (!validUrl.isUri(longUrl)) {
+        metrics.urlValidationErrors.inc({ reason: 'invalid_format' });
         throw new HttpError("Invalid URL format", 400);
     }
 
@@ -55,12 +61,14 @@ router.post("/shorten", asyncHandler(async (req, res) => {
     if (urlCode) {
         // Check if code follows allowed pattern
         if (!/^[a-zA-Z0-9_-]+$/.test(urlCode)) {
+            metrics.urlValidationErrors.inc({ reason: 'invalid_code_format' });
             throw new HttpError("Custom code can only contain letters, numbers, hyphens, and underscores", 400);
         }
 
         // Check if code is already in use
         const existingCodeBookmark = await URLModel.findByCode(urlCode);
         if (existingCodeBookmark) {
+            metrics.urlValidationErrors.inc({ reason: 'code_in_use' });
             throw new HttpError(`Code "${urlCode}" already in use. Please choose a different code.`, 400);
         }
     }
@@ -68,6 +76,10 @@ router.post("/shorten", asyncHandler(async (req, res) => {
     // Check for existing URL to avoid duplicates
     const existingURL = await URLModel.findByLongUrl(longUrl);
     if (existingURL && !urlCode) {
+        logger.debug('Returning existing shortened URL', { 
+            requestId: req.requestId, 
+            urlCode: existingURL.urlCode 
+        });
         return res.json({
             urlCode: existingURL.urlCode,
             shortUrl: existingURL.shortUrl,
@@ -84,6 +96,14 @@ router.post("/shorten", asyncHandler(async (req, res) => {
         urlCode: generatedCode,
         longUrl,
         shortUrl,
+    });
+
+    // Track URL creation metrics
+    metrics.urlsShortenedTotal.inc({ type: urlCode ? 'custom' : 'auto' });
+    logger.info('URL shortened', { 
+        requestId: req.requestId, 
+        urlCode: newURL.urlCode,
+        type: urlCode ? 'custom' : 'auto'
     });
 
     res.status(201).json({
