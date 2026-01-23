@@ -1,22 +1,24 @@
 services:
-  mongo:
-    image: mongo:6.0
+  mariadb:
+    image: mariadb:11.2
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
+      - mariadb_data:/var/lib/mysql
     networks:
       - app-network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -42,16 +44,17 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV}
       PORT: ${PORT}
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MONGODB_HOST: mongo
-      MONGODB_PORT: 27017
-      MONGODB_DATABASE: urlshortener
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       BASEURI: ${BACKEND_PUBLIC_URL}
     ports:
       - "5000:5000"
     depends_on:
-      mongo:
+      mariadb:
         condition: service_healthy
     networks:
       - app-network
@@ -109,8 +112,7 @@ services:
       - /tmp
 
 volumes:
-  mongodb_data:
-  mongodb_config:
+  mariadb_data:
 
 
 networks:

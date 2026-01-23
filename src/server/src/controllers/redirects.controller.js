@@ -25,10 +25,13 @@ router.get('/:code', asyncHandler(async (req, res) => {
     }
 
     // Find the URL in the database
-    const url = await URLModel.findOne({ urlCode: code });
+    const url = await URLModel.findByCode(code);
 
     // If URL exists, return it
     if (url) {
+        // Increment click count and update last accessed time
+        await URLModel.incrementClickCount(code);
+
         // Log the access (could be expanded to track analytics)
         console.log(`${new Date().toISOString()} - Redirect request for code: ${code} -> ${url.longUrl}`);
         return res.json({ longUrl: url.longUrl });
