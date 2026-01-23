@@ -1,0 +1,349 @@
+# Copyright 2025 Nova-Iris Team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "Helm Chart Release"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'release/helm-chart/**'
+      - '.github/workflows/helm-chart-release.yml'
+      - '.github/scripts/bump-version.sh'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  # Check if chart files changed
+  detect-chart-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      chart-changed: ${{ steps.check.outputs.chart-changed }}
+      previous-version: ${{ steps.check.outputs.previous-version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if chart files changed
+        id: check
+        run: |
+          # Get the previous version from git
+          PREVIOUS_VERSION=$(git show HEAD~1:release/helm-chart/url-shortener/Chart.yaml 2>/dev/null | grep '^version:' | awk '{print $2}' || echo "unknown")
+          
+          # Get current version
+          CURRENT_VERSION=$(grep '^version:' release/helm-chart/url-shortener/Chart.yaml | awk '{print $2}')
+          
+          echo "previous-version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if chart files (excluding values) changed
+          if git diff --quiet HEAD~1 HEAD -- 'release/helm-chart/**' ':!release/helm-chart/url-shortener/values.yaml' 2>/dev/null; then
+            echo "chart-changed=false" >> $GITHUB_OUTPUT
+            echo "Chart files unchanged"
+          else
+            echo "chart-changed=true" >> $GITHUB_OUTPUT
+            echo "Chart files changed: $PREVIOUS_VERSION → $CURRENT_VERSION"
+          fi
+
+  # Automatically bump Helm chart version
+  bump-chart-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      new-version: ${{ steps.bump.outputs.chart_version }}
+      bump-type: ${{ steps.bump.outputs.bump_type }}
+      version-changed: ${{ steps.check-version.outputs.version-changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Bump Helm chart version
+        id: bump
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          chmod +x .github/scripts/bump-version.sh
+          .github/scripts/bump-version.sh release/helm-chart/url-shortener/Chart.yaml
+
+      - name: Check if version actually changed
+        id: check-version
+        run: |
+          # Compare with git to see if version really changed
+          if git diff --quiet release/helm-chart/url-shortener/Chart.yaml 2>/dev/null; then
+            echo "version-changed=false" >> $GITHUB_OUTPUT
+            echo "No version change detected"
+          else
+            echo "version-changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed in Chart.yaml"
+          fi
+
+      - name: Commit version bump
+        if: steps.check-version.outputs.version-changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          NEW_VERSION="${{ steps.bump.outputs.chart_version }}"
+          BUMP_TYPE="${{ steps.bump.outputs.bump_type }}"
+
+          git add release/helm-chart/url-shortener/Chart.yaml
+
+          git commit -m "chore(helm): bump chart version to $NEW_VERSION ($BUMP_TYPE)
+
+          - Automatically bumped chart version using semantic versioning
+          - Bump type: $BUMP_TYPE
+          - Triggered by: ${{ github.event.head_commit.message }}"
+
+          git push origin main
+          echo "✅ Version bump committed and pushed"
+
+      - name: Skip if no changes needed
+        if: steps.check-version.outputs.version-changed != 'true'
+        run: |
+          echo "ℹ️  No version bump needed at this time"
+
+  # Lint and validate updated Helm chart
+  helm-lint:
+    needs: [bump-chart-version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Lint Helm chart
+        run: |
+          cd release/helm-chart/url-shortener/
+          echo "🔍 Linting Helm chart..."
+          helm lint . --strict
+          echo "✅ Helm lint passed"
+
+      - name: Validate chart metadata
+        run: |
+          cd release/helm-chart/url-shortener/
+          echo "📋 Validating Chart.yaml..."
+
+          # Get versions
+          CHART_VERSION=$(yq '.version' Chart.yaml)
+          APP_VERSION=$(yq '.appVersion' Chart.yaml)
+
+          echo "Chart Version: $CHART_VERSION"
+          echo "App Version: $APP_VERSION"
+
+          # Validate semantic versioning
+          if [[ ! $CHART_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Version '$CHART_VERSION' does not follow semantic versioning"
+            exit 1
+          fi
+
+          echo "✅ Chart.yaml validation passed"
+
+  # Package and publish Helm chart
+  helm-package:
+    needs: [bump-chart-version, helm-lint]
+    if: needs.bump-chart-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      chart-package: ${{ steps.package.outputs.chart-package }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Package Helm chart
+        id: package
+        run: |
+          cd release/helm-chart/url-shortener/
+
+          CHART_NAME=$(yq '.name' Chart.yaml)
+          CHART_VERSION=$(yq '.version' Chart.yaml)
+          CHART_PACKAGE="${CHART_NAME}-${CHART_VERSION}.tgz"
+
+          echo "📦 Packaging chart: $CHART_PACKAGE"
+          helm package . --destination /tmp
+
+          echo "chart-package=$CHART_PACKAGE" >> $GITHUB_OUTPUT
+          echo "chart-name=$CHART_NAME" >> $GITHUB_OUTPUT
+          echo "chart-version=$CHART_VERSION" >> $GITHUB_OUTPUT
+
+          # Verify package
+          ls -lh /tmp/${CHART_PACKAGE}
+          echo "✅ Chart packaged successfully"
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login -u ${{ github.actor }} --password-stdin ${{ env.REGISTRY }}
+
+      - name: Publish Helm chart to GHCR
+        run: |
+          CHART_PACKAGE="/tmp/${{ steps.package.outputs.chart-package }}"
+
+          echo "📤 Publishing chart to GHCR..."
+          helm push "$CHART_PACKAGE" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts
+
+          echo "✅ Chart published successfully!"
+          echo ""
+          echo "Chart Details:"
+          echo "  Registry: ${{ env.REGISTRY }}"
+          echo "  Namespace: ${{ github.repository_owner }}/helm-charts"
+          echo "  Chart: ${{ steps.package.outputs.chart-name }}"
+          echo "  Version: ${{ steps.package.outputs.chart-version }}"
+
+  # Create GitHub release and tag
+  create-release:
+    needs: [bump-chart-version, helm-package]
+    if: needs.bump-chart-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Get chart information
+        id: chart-info
+        run: |
+          cd release/helm-chart/url-shortener/
+          CHART_VERSION=$(yq '.version' Chart.yaml)
+          CHART_NAME=$(yq '.name' Chart.yaml)
+          CHART_DESC=$(yq '.description' Chart.yaml)
+
+          echo "chart-version=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "chart-name=$CHART_NAME" >> $GITHUB_OUTPUT
+          echo "chart-desc=$CHART_DESC" >> $GITHUB_OUTPUT
+
+      - name: Create Git tag
+        run: |
+          CHART_VERSION="${{ steps.chart-info.outputs.chart-version }}"
+          TAG_NAME="helm-chart/v${CHART_VERSION}"
+
+          echo "🏷️  Creating git tag: $TAG_NAME"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG_NAME" -m "Helm Chart Release v$CHART_VERSION" || echo "Tag already exists, skipping tag creation"
+          git push origin "$TAG_NAME" 2>/dev/null || echo "Tag push skipped (may already exist)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: helm-chart/v${{ steps.chart-info.outputs.chart-version }}
+          name: Helm Chart ${{ steps.chart-info.outputs.chart-name }} v${{ steps.chart-info.outputs.chart-version }}
+          body: |
+            ## Helm Chart Release
+
+            **Chart:** ${{ steps.chart-info.outputs.chart-name }}
+            **Version:** ${{ steps.chart-info.outputs.chart-version }}
+            **Description:** ${{ steps.chart-info.outputs.chart-desc }}
+
+            ### Installation
+
+            Add the Helm repository and install:
+
+            ```bash
+            helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }}
+            helm install url-shortener oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts/${{ steps.chart-info.outputs.chart-name }} --version ${{ steps.chart-info.outputs.chart-version }}
+            ```
+
+            Or upgrade an existing release:
+
+            ```bash
+            helm upgrade url-shortener oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts/${{ steps.chart-info.outputs.chart-name }} --version ${{ steps.chart-info.outputs.chart-version }}
+            ```
+
+            ### Changes
+
+            This release contains updates to the Helm chart and its templates.
+            See commit history for detailed changes.
+
+            ---
+            *Automatically generated release*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Release summary
+  release-summary:
+    needs: [bump-chart-version, helm-package, create-release]
+    if: always() && needs.bump-chart-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release Summary
+        run: |
+          echo "## 🎉 Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Release Successful!**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart Version | ${{ needs.bump-chart-version.outputs.new-version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump Type | ${{ needs.bump-chart-version.outputs.bump-type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart Package | ${{ needs.helm-package.outputs.chart-package }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry | ghcr.io/${{ github.repository_owner }}/helm-charts |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Pull the chart with:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "helm pull oci://ghcr.io/${{ github.repository_owner }}/helm-charts/url-shortener --version ${{ needs.bump-chart-version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
