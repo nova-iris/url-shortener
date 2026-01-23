@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS urls (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_accessed_at TIMESTAMP NULL DEFAULT NULL,
     expires_at TIMESTAMP NULL DEFAULT NULL,
-    INDEX idx_url_code (url_code),
     INDEX idx_long_url (long_url(255)),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `;
 

@@ -3,7 +3,7 @@
 Switch from using mongodb to mariaDB as the database for the URL Shortener Web Application.
 
 # Requirements
-1. Backen server
+1. Backend server
 - Update the backend to connect to a MariaDB database instead of MongoDB.
 - Modify the data models to be compatible with relational database structure.
 - Ensure all CRUD operations work correctly with MariaDB.
@@ -41,7 +41,7 @@ Use raw queries with mysql2 (lightweight, learning-friendly).
 Database Initialization: include SQL schema initialization script in the repo. Auto-create tables on startup if not exist.
 
 3. Docker Compose Configuration
-MariaDB Version: Which version? Recommend 12.2
+MariaDB Version: Which version? Recommend 11.2
 Persistent Storage: Keep same volume strategy
 Health Check: Use mysqladmin ping.
 Credentials Management: Switch to .env only.

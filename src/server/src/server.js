@@ -73,7 +73,14 @@ const gracefulShutdown = async (signal) => {
     console.log(`${new Date().toISOString()} - ${signal} signal received. Closing server...`);
 
     if (server) {
+        // Set a timeout for forceful shutdown
+        const shutdownTimeout = setTimeout(() => {
+            console.log(`${new Date().toISOString()} - Forceful shutdown due to timeout`);
+            process.exit(1);
+        }, 30000); // 30 seconds timeout
+
         server.close(async () => {
+            clearTimeout(shutdownTimeout);
             console.log(`${new Date().toISOString()} - HTTP server closed.`);
             try {
                 await close();

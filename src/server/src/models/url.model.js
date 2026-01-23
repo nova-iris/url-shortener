@@ -11,7 +11,7 @@ const URLModel = {
      */
     async findByCode(urlCode) {
         const [rows] = await pool.execute(
-            "SELECT * FROM urls WHERE url_code = ?",
+            "SELECT * FROM urls WHERE url_code = ? AND (expires_at IS NULL OR expires_at > NOW())",
             [urlCode]
         );
         return rows.length > 0 ? this._mapRow(rows[0]) : null;
@@ -42,18 +42,19 @@ const URLModel = {
              VALUES (?, ?, ?, ?, ?)`,
             [urlCode, longUrl, shortUrl, userId, expiresAt]
         );
-        return {
-            id: result.insertId,
-            urlCode,
-            longUrl,
-            shortUrl,
-            clickCount: 0,
-            userId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            lastAccessedAt: null,
-            expiresAt,
-        };
+        
+        // Fetch the actual created record to get accurate timestamps
+        const insertId = result.insertId;
+        const [rows] = await pool.execute(
+            "SELECT * FROM urls WHERE id = ?",
+            [insertId]
+        );
+
+        if (rows.length === 0) {
+            throw new Error("Failed to fetch URL after creation");
+        }
+
+        return this._mapRow(rows[0]);
     },
 
     /**
@@ -80,7 +81,7 @@ const URLModel = {
 
         const [rows] = await pool.execute(
             `SELECT * FROM urls ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-            [limit.toString(), offset.toString()]
+            [limit, offset]
         );
 
         const [[countResult]] = await pool.execute(

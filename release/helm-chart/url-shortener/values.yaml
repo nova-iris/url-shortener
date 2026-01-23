@@ -53,10 +53,10 @@ mariadb:
     # Useful for development, testing, and CI/CD pipelines
     useTemporaryStorage: false
   auth:
-    rootPassword: "rootpassword"  # In production, use a secret
+    rootPassword: "rootpassword"  # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
     database: "urlshortener"
     username: "urlshortener"
-    password: "urlshortener_password"  # In production, use a secret
+    password: "urlshortener_password"  # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
   service:
     type: ClusterIP
     port: 3306
