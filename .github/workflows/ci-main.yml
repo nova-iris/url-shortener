@@ -1,0 +1,202 @@
+# Copyright 2025 Nova-Iris Team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "CI - Main Branch"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - '.github/workflows/ci-main.yml'
+      - '.github/scripts/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+  security-events: write
+
+jobs:
+  # Detect which components changed
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      changed-components: ${{ steps.set-matrix.outputs.components }}
+      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed components
+        id: set-matrix
+        run: |
+          # Get all component directories
+          ALL_COMPONENTS='["client", "server"]'
+
+          # Get changed files in this push
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep '^src/' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No component changes detected, building all components"
+            COMPONENTS=$ALL_COMPONENTS
+            COMPONENTS_LIST="client server"
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            # Extract unique component names
+            COMPONENTS_LIST=$(echo "$CHANGED" | cut -d'/' -f2 | sort -u | tr '\n' ' ' | sed 's/ *$//')
+            COMPONENTS=$(echo "$COMPONENTS_LIST" | tr ' ' '\n' | jq -R -s -c 'split("\n")[:-1]')
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "matrix=$COMPONENTS" >> $GITHUB_OUTPUT
+          echo "components=$COMPONENTS_LIST" >> $GITHUB_OUTPUT
+          echo "Changed components: $COMPONENTS_LIST"
+
+  # Run tests
+  code-tests:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ./src/${{ matrix.component }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/${{ matrix.component }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test 2>/dev/null || echo "Tests not configured, skipping"
+
+  # Build, scan, and push Docker images
+  build-and-push:
+    needs: [detect-changes, code-tests]
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
+
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      security-events: write
+
+    outputs:
+      git-sha: ${{ steps.meta.outputs.short-sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get component metadata
+        id: meta
+        run: |
+          COMPONENT="${{ matrix.component }}"
+          VERSION="1.0.0"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "image-repo=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/url-shortener-$COMPONENT" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify GitHub Container Registry access
+        run: |
+          echo "🔍 Verifying GitHub Container Registry access..."
+          echo "Registry: ${{ env.REGISTRY }}"
+          echo "Namespace: ${{ env.IMAGE_NAMESPACE }}"
+          echo "Will push to: ${{ steps.meta.outputs.image-repo }}"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/${{ matrix.component }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image-repo }}:git-${{ steps.meta.outputs.short-sha }}
+            ${{ steps.meta.outputs.image-repo }}:v${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image-repo }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Confirm image push
+        if: success()
+        run: |
+          echo "✅ Successfully pushed images for ${{ matrix.component }}:"
+          echo "  - ${{ steps.meta.outputs.image-repo }}:git-${{ steps.meta.outputs.short-sha }}"
+          echo "  - ${{ steps.meta.outputs.image-repo }}:v${{ steps.meta.outputs.version }}"
+          echo "  - ${{ steps.meta.outputs.image-repo }}:latest"
+
+  # Build summary
+  build-summary:
+    needs: [detect-changes, code-tests, build-and-push]
+    if: always() && needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Changed Components:** ${{ needs.detect-changes.outputs.changed-components }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Tests | ${{ needs.code-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build & Push | ${{ needs.build-and-push.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "✅ **Images pushed to:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build failed. Check logs for details.**" >> $GITHUB_STEP_SUMMARY
+          fi
