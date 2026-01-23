@@ -31,11 +31,8 @@ spec:
               protocol: TCP
           env:
             - name: BACKEND_URL
-              {{- if .Values.networking.useIngress }}
-              value: {{ printf "http://%s" (index .Values.networking.ingress.hosts 0).host | quote }}
-              {{- else }}
-              value: {{ printf "http://%s:%d" .Values.networking.externalAccessHost (int .Values.server.service.nodePort) | quote }}
-              {{- end }}
+              # Use internal cluster service URL for backend API calls
+              value: {{ printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port) | quote }}
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
