@@ -2,6 +2,12 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Image pull secrets for private registries
+imagePullSecrets: []
+# Example:
+# imagePullSecrets:
+#   - name: ghcr-secret
+
 # Image settings
 image:
   # Set to true to use locally loaded images in Minikube

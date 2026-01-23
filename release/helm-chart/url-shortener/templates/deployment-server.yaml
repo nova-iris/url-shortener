@@ -17,6 +17,10 @@ spec:
         {{- include "url-shortener.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: server
           image: {{ include "url-shortener.serverImage" . | quote }}

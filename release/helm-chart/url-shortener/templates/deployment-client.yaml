@@ -17,6 +17,10 @@ spec:
         {{- include "url-shortener.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: client
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: client
           image: {{ include "url-shortener.clientImage" . | quote }}
