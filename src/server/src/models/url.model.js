@@ -1,4 +1,6 @@
 const { pool } = require("../configs/db");
+const { timeDbOperation } = require("../observability/metrics");
+const { logger } = require("../observability/logger");
 
 /**
  * URL Model - SQL-based repository for URL operations
@@ -10,11 +12,19 @@ const URLModel = {
      * @returns {Promise<Object|null>} The URL object or null if not found
      */
     async findByCode(urlCode) {
-        const [rows] = await pool.execute(
-            "SELECT * FROM urls WHERE url_code = ? AND (expires_at IS NULL OR expires_at > NOW())",
-            [urlCode]
-        );
-        return rows.length > 0 ? this._mapRow(rows[0]) : null;
+        const endTimer = timeDbOperation('SELECT', 'urls');
+        try {
+            const [rows] = await pool.execute(
+                "SELECT * FROM urls WHERE url_code = ? AND (expires_at IS NULL OR expires_at > NOW())",
+                [urlCode]
+            );
+            endTimer(true);
+            return rows.length > 0 ? this._mapRow(rows[0]) : null;
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'findByCode', error: err.message });
+            throw err;
+        }
     },
 
     /**
@@ -23,11 +33,19 @@ const URLModel = {
      * @returns {Promise<Object|null>} The URL object or null if not found
      */
     async findByLongUrl(longUrl) {
-        const [rows] = await pool.execute(
-            "SELECT * FROM urls WHERE long_url = ?",
-            [longUrl]
-        );
-        return rows.length > 0 ? this._mapRow(rows[0]) : null;
+        const endTimer = timeDbOperation('SELECT', 'urls');
+        try {
+            const [rows] = await pool.execute(
+                "SELECT * FROM urls WHERE long_url = ?",
+                [longUrl]
+            );
+            endTimer(true);
+            return rows.length > 0 ? this._mapRow(rows[0]) : null;
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'findByLongUrl', error: err.message });
+            throw err;
+        }
     },
 
     /**
@@ -36,25 +54,34 @@ const URLModel = {
      * @returns {Promise<Object>} The created URL object
      */
     async create(urlData) {
-        const { urlCode, longUrl, shortUrl, userId = null, expiresAt = null } = urlData;
-        const [result] = await pool.execute(
-            `INSERT INTO urls (url_code, long_url, short_url, user_id, expires_at)
-             VALUES (?, ?, ?, ?, ?)`,
-            [urlCode, longUrl, shortUrl, userId, expiresAt]
-        );
-        
-        // Fetch the actual created record to get accurate timestamps
-        const insertId = result.insertId;
-        const [rows] = await pool.execute(
-            "SELECT * FROM urls WHERE id = ?",
-            [insertId]
-        );
+        const endTimer = timeDbOperation('INSERT', 'urls');
+        try {
+            const { urlCode, longUrl, shortUrl, userId = null, expiresAt = null } = urlData;
+            const [result] = await pool.execute(
+                `INSERT INTO urls (url_code, long_url, short_url, user_id, expires_at)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [urlCode, longUrl, shortUrl, userId, expiresAt]
+            );
+            
+            // Fetch the actual created record to get accurate timestamps
+            const insertId = result.insertId;
+            const [rows] = await pool.execute(
+                "SELECT * FROM urls WHERE id = ?",
+                [insertId]
+            );
 
-        if (rows.length === 0) {
-            throw new Error("Failed to fetch URL after creation");
+            endTimer(true);
+
+            if (rows.length === 0) {
+                throw new Error("Failed to fetch URL after creation");
+            }
+
+            return this._mapRow(rows[0]);
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'create', error: err.message });
+            throw err;
         }
-
-        return this._mapRow(rows[0]);
     },
 
     /**
@@ -63,12 +90,20 @@ const URLModel = {
      * @returns {Promise<void>}
      */
     async incrementClickCount(urlCode) {
-        await pool.execute(
-            `UPDATE urls 
-             SET click_count = click_count + 1, last_accessed_at = CURRENT_TIMESTAMP 
-             WHERE url_code = ?`,
-            [urlCode]
-        );
+        const endTimer = timeDbOperation('UPDATE', 'urls');
+        try {
+            await pool.execute(
+                `UPDATE urls 
+                 SET click_count = click_count + 1, last_accessed_at = CURRENT_TIMESTAMP 
+                 WHERE url_code = ?`,
+                [urlCode]
+            );
+            endTimer(true);
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'incrementClickCount', error: err.message });
+            throw err;
+        }
     },
 
     /**
@@ -77,21 +112,29 @@ const URLModel = {
      * @returns {Promise<Object>} URLs and pagination info
      */
     async findAll({ page = 1, limit = 10 } = {}) {
-        const offset = (page - 1) * limit;
+        const endTimer = timeDbOperation('SELECT', 'urls');
+        try {
+            const offset = (page - 1) * limit;
 
-        const [rows] = await pool.execute(
-            `SELECT * FROM urls ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-            [limit, offset]
-        );
+            const [rows] = await pool.execute(
+                `SELECT * FROM urls ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+                [limit, offset]
+            );
 
-        const [[countResult]] = await pool.execute(
-            "SELECT COUNT(*) as total FROM urls"
-        );
+            const [[countResult]] = await pool.execute(
+                "SELECT COUNT(*) as total FROM urls"
+            );
 
-        return {
-            urls: rows.map(row => this._mapRow(row)),
-            total: countResult.total,
-        };
+            endTimer(true);
+            return {
+                urls: rows.map(row => this._mapRow(row)),
+                total: countResult.total,
+            };
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'findAll', error: err.message });
+            throw err;
+        }
     },
 
     /**
@@ -100,11 +143,19 @@ const URLModel = {
      * @returns {Promise<boolean>} True if deleted, false if not found
      */
     async deleteByCode(urlCode) {
-        const [result] = await pool.execute(
-            "DELETE FROM urls WHERE url_code = ?",
-            [urlCode]
-        );
-        return result.affectedRows > 0;
+        const endTimer = timeDbOperation('DELETE', 'urls');
+        try {
+            const [result] = await pool.execute(
+                "DELETE FROM urls WHERE url_code = ?",
+                [urlCode]
+            );
+            endTimer(true);
+            return result.affectedRows > 0;
+        } catch (err) {
+            endTimer(false);
+            logger.error('Database query failed', { operation: 'deleteByCode', error: err.message });
+            throw err;
+        }
     },
 
     /**

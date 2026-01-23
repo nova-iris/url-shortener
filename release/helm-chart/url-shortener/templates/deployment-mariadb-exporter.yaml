@@ -1,0 +1,85 @@
+{{- if and .Values.mariadb.enabled .Values.observability.mariadbExporter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-mariadb-exporter
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "url-shortener.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mariadb-exporter
+  template:
+    metadata:
+      labels:
+        {{- include "url-shortener.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mariadb-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9104"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: mariadb-exporter
+          image: "{{ .Values.observability.mariadbExporter.image.repository }}:{{ .Values.observability.mariadbExporter.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.mariadbExporter.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: 9104
+              protocol: TCP
+          env:
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "url-shortener.fullname" . }}-mariadb-exporter-secret
+                  key: datasource
+          resources:
+            {{- toYaml .Values.observability.mariadbExporter.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-mariadb-exporter
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9104"
+spec:
+  type: {{ .Values.observability.mariadbExporter.service.type }}
+  ports:
+    - port: {{ .Values.observability.mariadbExporter.service.port }}
+      targetPort: 9104
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "url-shortener.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb-exporter
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-mariadb-exporter-secret
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb-exporter
+type: Opaque
+stringData:
+  datasource: "{{ .Values.mariadb.auth.username }}:{{ .Values.mariadb.auth.password }}@tcp({{ include "url-shortener.fullname" . }}-mariadb:3306)/{{ .Values.mariadb.auth.database }}"
+{{- end }}

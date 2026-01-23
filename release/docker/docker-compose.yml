@@ -51,8 +51,19 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       BASEURI: ${BACKEND_PUBLIC_URL}
+      # Observability settings
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ENABLE_TRACING: ${ENABLE_TRACING:-false}
+      OTEL_SERVICE_NAME: urlshortener-server
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318/v1/traces}
+      OTEL_SAMPLING_RATE: ${OTEL_SAMPLING_RATE:-0.1}
     ports:
       - "5000:5000"
+    labels:
+      # Prometheus scraping labels
+      - "prometheus.scrape=true"
+      - "prometheus.port=5000"
+      - "prometheus.path=/metrics"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -85,6 +96,7 @@ services:
     restart: unless-stopped
     environment:
       - BACKEND_URL=${BACKEND_PUBLIC_URL}
+      - VITE_LOG_LEVEL=${LOG_LEVEL:-info}
     ports:
       - "4173:4173"
     depends_on:
@@ -110,6 +122,56 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+
+  # Jaeger for distributed tracing (optional - enable with ENABLE_TRACING=true)
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP
+    networks:
+      - app-network
+    profiles:
+      - tracing
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+
+  # MariaDB Exporter for database metrics (optional)
+  mariadb-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "${DB_USER}:${DB_PASSWORD}@tcp(mariadb:3306)/${DB_NAME}"
+    ports:
+      - "9104:9104"
+    labels:
+      - "prometheus.scrape=true"
+      - "prometheus.port=9104"
+      - "prometheus.path=/metrics"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - app-network
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
 
 volumes:
   mariadb_data:

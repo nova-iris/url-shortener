@@ -1,0 +1,74 @@
+{{- if and .Values.observability.tracing.enabled .Values.observability.tracing.jaeger.deploy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-jaeger
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "url-shortener.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: jaeger
+  template:
+    metadata:
+      labels:
+        {{- include "url-shortener.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: "{{ .Values.observability.tracing.jaeger.image.repository }}:{{ .Values.observability.tracing.jaeger.image.tag }}"
+          imagePullPolicy: {{ .Values.observability.tracing.jaeger.image.pullPolicy }}
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: ui
+              containerPort: 16686
+              protocol: TCP
+            - name: collector
+              containerPort: 14268
+              protocol: TCP
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          resources:
+            {{- toYaml .Values.observability.tracing.jaeger.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: ui
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: ui
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "url-shortener.fullname" . }}-jaeger
+  labels:
+    {{- include "url-shortener.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  type: {{ .Values.observability.tracing.jaeger.service.type }}
+  ports:
+    - port: {{ .Values.observability.tracing.jaeger.service.otlpHttpPort }}
+      targetPort: 4318
+      protocol: TCP
+      name: otlp-http
+    - port: {{ .Values.observability.tracing.jaeger.service.uiPort }}
+      targetPort: 16686
+      protocol: TCP
+      name: ui
+  selector:
+    {{- include "url-shortener.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+{{- end }}

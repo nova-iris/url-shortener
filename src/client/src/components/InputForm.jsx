@@ -14,6 +14,7 @@ import {
     InputLeftAddon,
 } from "@chakra-ui/react";
 import styles from './InputForm.module.css';
+import { logger } from '../utils/logger';
 
 export const InputForm = () => {
     const [input, setInput] = useState(
@@ -40,38 +41,49 @@ export const InputForm = () => {
         }
     };
 
+    const handleCopy = () => {
+        onCopy();
+        logger.logUserAction('copy', 'InputForm', { url });
+    };
+
     const handleSubmit = () => {
         if (!input.longUrl) {
             setIsError(true);
             setUrl("Please add a URL");
+            logger.warn('URL validation failed', { reason: 'empty_url', component: 'InputForm' });
             return;
         }
 
         setIsloading(true);
+        logger.logUserAction('submit', 'InputForm', { hasCustomCode: !!input.urlCode });
 
         const apiUrl = '/api/url/shorten';
-        console.log('Making API request to:', axios.defaults.baseURL + apiUrl);
+        const startTime = Date.now();
 
         axios.post(apiUrl, input)
             .then(res => {
-                console.log('API response:', res);
+                const duration = Date.now() - startTime;
+                logger.logApiCall('POST', apiUrl, res.status, duration);
+                
                 if (res?.data) {
                     const shortenedUrl = clientBaseUrl + res.data.urlCode;
                     setUrl(shortenedUrl);
+                    logger.info('URL shortened successfully', { 
+                        urlCode: res.data.urlCode, 
+                        isExisting: res.data.isExisting 
+                    });
                 }
                 setIsloading(false);
             })
             .catch(error => {
-                console.error('API error details:', {
-                    message: error.message,
-                    status: error.response?.status,
-                    data: error.response?.data,
-                    config: {
-                        url: error.config?.url,
-                        baseURL: error.config?.baseURL,
-                        method: error.config?.method
-                    }
-                });
+                const duration = Date.now() - startTime;
+                logger.logApiCall(
+                    'POST', 
+                    apiUrl, 
+                    error.response?.status || 0, 
+                    duration, 
+                    error
+                );
 
                 const errorMsg = error?.response?.data?.error || 'Failed to connect to server';
                 setUrl(errorMsg);
@@ -126,7 +138,7 @@ export const InputForm = () => {
             </Button>
             {url && <Flex mb={2}>
                 <Input value={url} isReadOnly placeholder="Short Url" />
-                <Button onClick={onCopy} ml={2}>
+                <Button onClick={handleCopy} ml={2}>
                     {hasCopied ? "Copied" : "Copy"}
                 </Button>
             </Flex>}

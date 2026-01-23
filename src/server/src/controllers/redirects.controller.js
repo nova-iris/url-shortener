@@ -1,5 +1,7 @@
 const router = require('express').Router();
 const { URLModel } = require('../models/url.model');
+const { metrics } = require('../observability/metrics');
+const { logger } = require('../observability/logger');
 
 // Reuse the HttpError class for consistent error handling
 class HttpError extends Error {
@@ -32,12 +34,20 @@ router.get('/:code', asyncHandler(async (req, res) => {
         // Increment click count and update last accessed time
         await URLModel.incrementClickCount(code);
 
-        // Log the access (could be expanded to track analytics)
-        console.log(`${new Date().toISOString()} - Redirect request for code: ${code} -> ${url.longUrl}`);
+        // Track redirect metrics
+        metrics.redirectsTotal.inc({ status: 'success' });
+        
+        logger.debug('Redirect served', { 
+            requestId: req.requestId, 
+            code, 
+            longUrl: url.longUrl 
+        });
+        
         return res.json({ longUrl: url.longUrl });
     }
 
     // If URL doesn't exist, return 404
+    metrics.redirectsTotal.inc({ status: 'not_found' });
     throw new HttpError(`No URL found for code: ${code}`, 404);
 }));
 
