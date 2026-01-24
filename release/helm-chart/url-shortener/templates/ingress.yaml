@@ -26,13 +26,7 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "url-shortener.fullname" $ }}-server
-                port:
-                  number: {{ $.Values.server.service.port }}
+          # All traffic goes to the client, which proxies /api to the internal backend
           - path: /
             pathType: Prefix
             backend:

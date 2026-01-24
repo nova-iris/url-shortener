@@ -107,10 +107,10 @@ client:
     tag: "latest"
     pullPolicy: IfNotPresent
   replicaCount: 1
-  # Backend URL for API calls from the browser
-  # When using Ingress: leave empty "" to use relative paths (recommended)
-  # When using NodePort: internal service URL is used automatically if not set
-  # Can also set to full public URL like "https://url.example.com"
+  # Internal backend URL for API proxy
+  # The client server proxies /api requests to the internal backend service
+  # Leave empty to use default: http://<release>-server:<port>
+  # The backend is NOT exposed to the internet - all API traffic goes through the client proxy
   backendUrl: ""
   resources:
     requests:

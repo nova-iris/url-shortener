@@ -31,13 +31,9 @@ spec:
               protocol: TCP
           env:
             - name: BACKEND_URL
-              # When using Ingress, use empty string for relative API paths (browser will use same origin)
-              # When using NodePort/direct access, use internal service URL
-              {{- if and .Values.networking.useIngress .Values.networking.ingress.enabled }}
-              value: {{ .Values.client.backendUrl | default "" | quote }}
-              {{- else }}
+              # Internal cluster service URL for API proxy
+              # The client server proxies /api requests to this internal backend URL
               value: {{ .Values.client.backendUrl | default (printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port)) | quote }}
-              {{- end }}
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
