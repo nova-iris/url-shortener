@@ -33,7 +33,11 @@ spec:
             - name: BACKEND_URL
               # Internal cluster service URL for API proxy
               # The client server proxies /api requests to this internal backend URL
-              value: {{ .Values.client.backendUrl | default (printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port)) | quote }}
+              {{- if .Values.client.backendUrl }}
+              value: {{ .Values.client.backendUrl | quote }}
+              {{- else }}
+              value: {{ printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port) | quote }}
+              {{- end }}
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

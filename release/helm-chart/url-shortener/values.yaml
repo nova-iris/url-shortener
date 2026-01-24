@@ -109,9 +109,9 @@ client:
   replicaCount: 1
   # Internal backend URL for API proxy
   # The client server proxies /api requests to the internal backend service
-  # Leave empty to use default: http://<release>-server:<port>
+  # Leave empty/unset to use default: http://<release>-server:<port>
   # The backend is NOT exposed to the internet - all API traffic goes through the client proxy
-  backendUrl: ""
+  # backendUrl: ""
   resources:
     requests:
       cpu: "150m"
