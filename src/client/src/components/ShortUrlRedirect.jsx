@@ -9,7 +9,7 @@ export default function ShortUrlRedirect() {
 
     const redirect = async () => {
         try {
-            const response = await axios.get(`/${urlCode}`);
+            const response = await axios.get(`/api/${urlCode}`);
             if (response.data.longUrl) {
                 window.location.href = response.data.longUrl;
             }

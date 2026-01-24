@@ -9,13 +9,10 @@ import axios from 'axios';
 // Use the runtime configuration instead of build-time env variables
 console.log('Runtime config:', window.RUNTIME_CONFIG);
 
-// Get backend URL from runtime config without fallback to localhost
-const serverBaseUrl = window.RUNTIME_CONFIG?.BACKEND_URL;
-console.log('Using backend URL:', serverBaseUrl);
-
-if (!serverBaseUrl) {
-    console.error('Backend URL is not configured. Please set BACKEND_URL in environment variables.');
-}
+// Get backend URL from runtime config
+// Empty string means use relative paths (same origin) - the client server proxies /api requests
+const serverBaseUrl = window.RUNTIME_CONFIG?.BACKEND_URL || '';
+console.log('Using backend URL:', serverBaseUrl || '(relative paths - proxied by client server)');
 
 // Configure axios
 axios.defaults.baseURL = serverBaseUrl;
