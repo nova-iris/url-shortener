@@ -5,13 +5,14 @@ set -e
 echo "Starting docker-entrypoint.sh"
 echo "BACKEND_URL=$BACKEND_URL"
 
-# Use the environment variable without a default value
-RUNTIME_BACKEND_URL=${BACKEND_URL}
+# Use the environment variable (empty string is valid for relative API paths via Ingress)
+RUNTIME_BACKEND_URL=${BACKEND_URL:-}
 
-# Check if BACKEND_URL is set
+# Log the configuration
 if [ -z "$RUNTIME_BACKEND_URL" ]; then
-  echo "WARNING: BACKEND_URL environment variable is not set"
-  echo "Please ensure BACKEND_URL is properly configured in your environment"
+  echo "INFO: BACKEND_URL is empty - using relative API paths (suitable for Ingress routing)"
+else
+  echo "INFO: BACKEND_URL is set to: $RUNTIME_BACKEND_URL"
 fi
 
 # Since we can't modify files in a read-only filesystem, we'll use a different approach

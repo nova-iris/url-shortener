@@ -18,6 +18,6 @@ data:
   DB_NAME: {{ .Values.externalDatabase.database | quote }}
   DB_POOL_MAX: "10"
   {{- end }}
-  # Use internal cluster service URL for backend communication
-  # This allows frontend to communicate with backend within the cluster
-  BACKEND_PUBLIC_URL: {{ printf "http://%s:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port) | quote }}
+  # Internal cluster service URL for server-to-server communication
+  # Note: Frontend uses BACKEND_URL env var in deployment, not this ConfigMap value
+  BACKEND_INTERNAL_URL: {{ printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port) | quote }}

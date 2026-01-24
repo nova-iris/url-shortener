@@ -107,6 +107,11 @@ client:
     tag: "latest"
     pullPolicy: IfNotPresent
   replicaCount: 1
+  # Backend URL for API calls from the browser
+  # When using Ingress: leave empty "" to use relative paths (recommended)
+  # When using NodePort: internal service URL is used automatically if not set
+  # Can also set to full public URL like "https://url.example.com"
+  backendUrl: ""
   resources:
     requests:
       cpu: "150m"
