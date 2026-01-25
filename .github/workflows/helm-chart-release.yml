@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: "Helm Chart Release"
+# This workflow handles Helm chart releases when ONLY the helm chart changes
+# (templates, values, Chart.yaml, etc.) WITHOUT any src/ code changes.
+#
+# When src/ code changes, the ci-main.yml workflow handles both:
+# - Building and tagging Docker images with semantic versions
+# - Updating helm chart with new image tags and releasing the chart
+
+name: "Helm Chart Release (Chart Only)"
 
 on:
   push:
@@ -21,7 +28,6 @@ on:
     paths:
       - 'release/helm-chart/**'
       - '.github/workflows/helm-chart-release.yml'
-      - '.github/scripts/bump-version.sh'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,45 +42,50 @@ permissions:
   id-token: write
 
 jobs:
-  # Check if chart files changed
-  detect-chart-changes:
+  # Check if this is a chart-only change (no src changes in the same commit)
+  check-trigger:
     runs-on: ubuntu-latest
     outputs:
-      chart-changed: ${{ steps.check.outputs.chart-changed }}
-      previous-version: ${{ steps.check.outputs.previous-version }}
+      should-run: ${{ steps.check.outputs.should-run }}
+      is-skip-ci: ${{ steps.check.outputs.is-skip-ci }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
-      - name: Check if chart files changed
+      - name: Check if chart-only change
         id: check
         run: |
-          # Get the previous version from git
-          PREVIOUS_VERSION=$(git show HEAD~1:release/helm-chart/url-shortener/Chart.yaml 2>/dev/null | grep '^version:' | awk '{print $2}' || echo "unknown")
-          
-          # Get current version
-          CURRENT_VERSION=$(grep '^version:' release/helm-chart/url-shortener/Chart.yaml | awk '{print $2}')
-          
-          echo "previous-version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          
-          # Check if chart files (excluding values) changed
-          if git diff --quiet HEAD~1 HEAD -- 'release/helm-chart/**' ':!release/helm-chart/url-shortener/values.yaml' 2>/dev/null; then
-            echo "chart-changed=false" >> $GITHUB_OUTPUT
-            echo "Chart files unchanged"
-          else
-            echo "chart-changed=true" >> $GITHUB_OUTPUT
-            echo "Chart files changed: $PREVIOUS_VERSION → $CURRENT_VERSION"
+          # Check if commit message contains [skip ci]
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MSG" == *"[skip ci]"* ]]; then
+            echo "Commit has [skip ci], skipping workflow"
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "is-skip-ci=true" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
-  # Automatically bump Helm chart version
+          # Check if src/ also changed in this commit
+          SRC_CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep '^src/' || true)
+
+          if [ -n "$SRC_CHANGED" ]; then
+            echo "src/ also changed, ci-main.yml will handle the release"
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "is-skip-ci=false" >> $GITHUB_OUTPUT
+          else
+            echo "Chart-only change detected, proceeding with release"
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "is-skip-ci=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Bump Helm chart version based on commit message
   bump-chart-version:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
-      new-version: ${{ steps.bump.outputs.chart_version }}
-      bump-type: ${{ steps.bump.outputs.bump_type }}
+      new-version: ${{ steps.bump.outputs.new-version }}
+      bump-type: ${{ steps.bump.outputs.bump-type }}
       version-changed: ${{ steps.check-version.outputs.version-changed }}
     steps:
       - uses: actions/checkout@v4
@@ -86,20 +97,49 @@ jobs:
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
           sudo chmod +x /usr/local/bin/yq
-          yq --version
 
       - name: Bump Helm chart version
         id: bump
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          chmod +x .github/scripts/bump-version.sh
-          .github/scripts/bump-version.sh release/helm-chart/url-shortener/Chart.yaml
+          CHART_FILE="release/helm-chart/url-shortener/Chart.yaml"
+
+          # Get current version
+          CURRENT_VERSION=$(yq '.version' "$CHART_FILE")
+          echo "Current version: $CURRENT_VERSION"
+
+          # Determine bump type from commit message
+          if [[ "$COMMIT_MESSAGE" =~ breaking|BREAKING\ CHANGE|^feat(\(.+\))?!: ]]; then
+            BUMP_TYPE="major"
+          elif [[ "$COMMIT_MESSAGE" =~ ^feat ]]; then
+            BUMP_TYPE="minor"
+          else
+            BUMP_TYPE="patch"
+          fi
+
+          echo "Bump type: $BUMP_TYPE"
+
+          # Parse and bump version
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          case "$BUMP_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          NEW_VERSION="${major}.${minor}.${patch}"
+
+          echo "New version: $NEW_VERSION"
+
+          # Update Chart.yaml
+          yq eval ".version = \"$NEW_VERSION\"" -i "$CHART_FILE"
+
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
 
       - name: Check if version actually changed
         id: check-version
         run: |
-          # Compare with git to see if version really changed
           if git diff --quiet release/helm-chart/url-shortener/Chart.yaml 2>/dev/null; then
             echo "version-changed=false" >> $GITHUB_OUTPUT
             echo "No version change detected"
@@ -114,28 +154,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          NEW_VERSION="${{ steps.bump.outputs.chart_version }}"
-          BUMP_TYPE="${{ steps.bump.outputs.bump_type }}"
+          NEW_VERSION="${{ steps.bump.outputs.new-version }}"
+          BUMP_TYPE="${{ steps.bump.outputs.bump-type }}"
 
           git add release/helm-chart/url-shortener/Chart.yaml
 
           git commit -m "chore(helm): bump chart version to $NEW_VERSION ($BUMP_TYPE)
 
-          - Automatically bumped chart version using semantic versioning
+          - Automatically bumped chart version
           - Bump type: $BUMP_TYPE
-          - Triggered by: ${{ github.event.head_commit.message }}"
+          - Triggered by: ${{ github.event.head_commit.message }}
+
+          [skip ci]"
 
           git push origin main
-          echo "✅ Version bump committed and pushed"
+          echo "✅ Version bump committed"
 
-      - name: Skip if no changes needed
-        if: steps.check-version.outputs.version-changed != 'true'
-        run: |
-          echo "ℹ️  No version bump needed at this time"
-
-  # Lint and validate updated Helm chart
+  # Lint and validate Helm chart
   helm-lint:
-    needs: [bump-chart-version]
+    needs: [check-trigger, bump-chart-version]
+    if: needs.check-trigger.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -148,11 +186,6 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Set up yq
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-          sudo chmod +x /usr/local/bin/yq
-
       - name: Lint Helm chart
         run: |
           cd release/helm-chart/url-shortener/
@@ -160,33 +193,14 @@ jobs:
           helm lint . --strict
           echo "✅ Helm lint passed"
 
-      - name: Validate chart metadata
-        run: |
-          cd release/helm-chart/url-shortener/
-          echo "📋 Validating Chart.yaml..."
-
-          # Get versions
-          CHART_VERSION=$(yq '.version' Chart.yaml)
-          APP_VERSION=$(yq '.appVersion' Chart.yaml)
-
-          echo "Chart Version: $CHART_VERSION"
-          echo "App Version: $APP_VERSION"
-
-          # Validate semantic versioning
-          if [[ ! $CHART_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Version '$CHART_VERSION' does not follow semantic versioning"
-            exit 1
-          fi
-
-          echo "✅ Chart.yaml validation passed"
-
   # Package and publish Helm chart
   helm-package:
-    needs: [bump-chart-version, helm-lint]
-    if: needs.bump-chart-version.outputs.version-changed == 'true'
+    needs: [check-trigger, bump-chart-version, helm-lint]
+    if: needs.check-trigger.outputs.should-run == 'true' && needs.bump-chart-version.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
     outputs:
       chart-package: ${{ steps.package.outputs.chart-package }}
+      chart-version: ${{ steps.package.outputs.chart-version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -219,7 +233,6 @@ jobs:
           echo "chart-name=$CHART_NAME" >> $GITHUB_OUTPUT
           echo "chart-version=$CHART_VERSION" >> $GITHUB_OUTPUT
 
-          # Verify package
           ls -lh /tmp/${CHART_PACKAGE}
           echo "✅ Chart packaged successfully"
 
@@ -235,10 +248,7 @@ jobs:
           helm push "$CHART_PACKAGE" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts
 
           echo "✅ Chart published successfully!"
-          echo ""
-          echo "Chart Details:"
           echo "  Registry: ${{ env.REGISTRY }}"
-          echo "  Namespace: ${{ github.repository_owner }}/helm-charts"
           echo "  Chart: ${{ steps.package.outputs.chart-name }}"
           echo "  Version: ${{ steps.package.outputs.chart-version }}"
 
@@ -277,13 +287,13 @@ jobs:
           CHART_VERSION="${{ steps.chart-info.outputs.chart-version }}"
           TAG_NAME="helm-chart/v${CHART_VERSION}"
 
-          echo "🏷️  Creating git tag: $TAG_NAME"
+          echo "🏷️ Creating git tag: $TAG_NAME"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git tag -a "$TAG_NAME" -m "Helm Chart Release v$CHART_VERSION" || echo "Tag already exists, skipping tag creation"
-          git push origin "$TAG_NAME" 2>/dev/null || echo "Tag push skipped (may already exist)"
+          git tag -a "$TAG_NAME" -m "Helm Chart Release v$CHART_VERSION" || echo "Tag already exists"
+          git push origin "$TAG_NAME" 2>/dev/null || echo "Tag push skipped"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -299,10 +309,8 @@ jobs:
 
             ### Installation
 
-            Add the Helm repository and install:
-
             ```bash
-            helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }}
+            helm registry login ${{ env.REGISTRY }} -u <username>
             helm install url-shortener oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts/${{ steps.chart-info.outputs.chart-name }} --version ${{ steps.chart-info.outputs.chart-version }}
             ```
 
@@ -314,7 +322,7 @@ jobs:
 
             ### Changes
 
-            This release contains updates to the Helm chart and its templates.
+            This release contains updates to the Helm chart templates or configuration.
             See commit history for detailed changes.
 
             ---
@@ -334,7 +342,7 @@ jobs:
         run: |
           echo "## 🎉 Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **Release Successful!**" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Chart-Only Release Successful!**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
