@@ -1,27 +1,42 @@
+// Initialize tracing before any other imports (required for auto-instrumentation)
+const { initTracing } = require("./observability/tracing");
+
 const express = require("express");
 const cors = require("cors");
-const { connect, close } = require("./configs/db");
+const { connect, close, getPool } = require("./configs/db");
 const urlRouter = require("./controllers/url.controller");
 const redirectRouter = require("./controllers/redirects.controller");
+const { 
+    metricsMiddleware, 
+    metricsHandler, 
+    updateDbPoolMetrics,
+    metrics 
+} = require("./observability/metrics");
+const { 
+    logger, 
+    requestLoggingMiddleware, 
+    attachRequestLogger 
+} = require("./observability/logger");
 
 const app = express();
 
-// Request logging middleware
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
-    });
-    next();
-});
+// Observability middleware (order matters)
+// 1. Request logging with request ID generation
+app.use(requestLoggingMiddleware);
+// 2. Attach child logger with request context
+app.use(attachRequestLogger);
+// 3. Metrics collection
+app.use(metricsMiddleware);
 
 app.use(cors());
 app.use(express.json());
 
+// Metrics endpoint for Prometheus scraping
+app.get("/metrics", metricsHandler);
+
 // Health check endpoint
 app.get("/health", (req, res) => {
-    res.status(200).json("OK");
+    res.status(200).json({ status: "OK" });
 });
 
 // Add API prefix to URL routes
@@ -39,13 +54,29 @@ app.use((req, res, next) => {
 
 // Global error handling middleware
 app.use((err, req, res, next) => {
-    console.error(`${new Date().toISOString()} - Error: ${err.message}`);
-    console.error(err.stack);
-
     const statusCode = err.statusCode || 500;
+    
+    // Log error with structured logging
+    logger.error('Request error', {
+        requestId: req.requestId,
+        error: err.message,
+        errorName: err.name,
+        statusCode,
+        path: req.path,
+        method: req.method,
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+    });
+
+    // Track error metrics
+    metrics.errorsTotal.inc({ 
+        type: err.name || 'UnknownError', 
+        status_code: statusCode.toString() 
+    });
+
     res.status(statusCode).json({
         error: err.name || "Internal Server Error",
         message: err.message || "An unexpected error occurred",
+        requestId: req.requestId,
         ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
     });
 });
@@ -53,42 +84,49 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 5000;
 let server;
 
-// Start server after database connection
+// Start server after database connection and tracing initialization
 const startServer = async () => {
     try {
+        // Initialize tracing (if enabled)
+        await initTracing();
+
         // Connect to database and initialize schema
         await connect();
 
+        // Update database pool metrics periodically
+        const pool = getPool();
+        setInterval(() => updateDbPoolMetrics(pool), 15000);
+
         // Start listening
         server = app.listen(port, () => {
-            console.log(`${new Date().toISOString()} - Server is running on port ${port}`);
+            logger.info('Server started', { port, nodeEnv: process.env.NODE_ENV });
         });
     } catch (err) {
-        console.error(`${new Date().toISOString()} - Failed to start server:`, err);
+        logger.error('Failed to start server', { error: err.message, stack: err.stack });
         process.exit(1);
     }
 };
 
 // Handle graceful shutdown
 const gracefulShutdown = async (signal) => {
-    console.log(`${new Date().toISOString()} - ${signal} signal received. Closing server...`);
+    logger.info('Shutdown signal received', { signal });
 
     if (server) {
         // Set a timeout for forceful shutdown
         const shutdownTimeout = setTimeout(() => {
-            console.log(`${new Date().toISOString()} - Forceful shutdown due to timeout`);
+            logger.warn('Forceful shutdown due to timeout');
             process.exit(1);
         }, 30000); // 30 seconds timeout
 
         server.close(async () => {
             clearTimeout(shutdownTimeout);
-            console.log(`${new Date().toISOString()} - HTTP server closed.`);
+            logger.info('HTTP server closed');
             try {
                 await close();
-                console.log(`${new Date().toISOString()} - Database connection closed.`);
+                logger.info('Database connection closed');
                 process.exit(0);
             } catch (err) {
-                console.error(`${new Date().toISOString()} - Error during shutdown:`, err);
+                logger.error('Error during shutdown', { error: err.message });
                 process.exit(1);
             }
         });

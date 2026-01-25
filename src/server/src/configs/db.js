@@ -1,4 +1,5 @@
 const mysql = require("mysql2/promise");
+const { logger } = require("../observability/logger");
 
 // Database configuration from environment variables
 const dbConfig = {
@@ -45,9 +46,9 @@ const initializeSchema = async () => {
         const connection = await pool.getConnection();
         await connection.execute(CREATE_TABLE_SQL);
         connection.release();
-        console.log("Database schema initialized successfully");
+        logger.info("Database schema initialized successfully");
     } catch (err) {
-        console.error("Error initializing database schema:", err);
+        logger.error("Error initializing database schema", { error: err.message });
         throw err;
     }
 };
@@ -59,7 +60,11 @@ const connect = async () => {
     try {
         // Test connection
         const connection = await pool.getConnection();
-        console.log(`Connected to MariaDB at ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
+        logger.info("Connected to MariaDB", { 
+            host: dbConfig.host, 
+            port: dbConfig.port, 
+            database: dbConfig.database 
+        });
         connection.release();
 
         // Initialize schema
@@ -67,7 +72,7 @@ const connect = async () => {
 
         return pool;
     } catch (err) {
-        console.error("MariaDB connection error:", err);
+        logger.error("MariaDB connection error", { error: err.message });
         throw err;
     }
 };
@@ -78,9 +83,9 @@ const connect = async () => {
 const close = async () => {
     try {
         await pool.end();
-        console.log("Database connection pool closed");
+        logger.info("Database connection pool closed");
     } catch (err) {
-        console.error("Error closing database connection pool:", err);
+        logger.error("Error closing database connection pool", { error: err.message });
         throw err;
     }
 };

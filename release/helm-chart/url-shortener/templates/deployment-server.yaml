@@ -16,6 +16,12 @@ spec:
       labels:
         {{- include "url-shortener.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
+      {{- if .Values.observability.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+      {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -34,6 +40,23 @@ spec:
               value: {{ .Values.server.env.NODE_ENV | quote }}
             - name: PORT
               value: "5000"
+            - name: LOG_LEVEL
+              value: {{ .Values.server.env.LOG_LEVEL | default "info" | quote }}
+            {{- if .Values.observability.tracing.enabled }}
+            - name: ENABLE_TRACING
+              value: "true"
+            - name: OTEL_SERVICE_NAME
+              value: "urlshortener-server"
+            - name: OTEL_SAMPLING_RATE
+              value: {{ .Values.observability.tracing.samplingRate | quote }}
+            {{- if .Values.observability.tracing.jaeger.deploy }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ include "url-shortener.fullname" . }}-jaeger:{{ .Values.observability.tracing.jaeger.service.otlpHttpPort }}/v1/traces"
+            {{- else if .Values.observability.tracing.jaeger.externalEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.tracing.jaeger.externalEndpoint | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.mariadb.enabled }}
             - name: DB_HOST
               value: {{ include "url-shortener.fullname" . }}-mariadb
