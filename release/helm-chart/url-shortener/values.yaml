@@ -82,8 +82,8 @@ externalDatabase:
 # Server (backend) configuration
 server:
   image:
-    repository: "urlshortener-server"
-    tag: "latest"
+    repository: "url-shortener-server"
+    tag: "v1.0.0"
     pullPolicy: IfNotPresent
   replicaCount: 1
   resources:
@@ -160,8 +160,8 @@ observability:
 # Client (frontend) configuration
 client:
   image:
-    repository: "urlshortener-client"
-    tag: "latest"
+    repository: "url-shortener-client"
+    tag: "v1.0.0"
     pullPolicy: IfNotPresent
   replicaCount: 1
   # Internal backend URL for API proxy

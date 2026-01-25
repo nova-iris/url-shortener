@@ -45,6 +45,8 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       changed-components: ${{ steps.set-matrix.outputs.components }}
       has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+      client-changed: ${{ steps.set-matrix.outputs.client-changed }}
+      server-changed: ${{ steps.set-matrix.outputs.server-changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,27 +55,135 @@ jobs:
       - name: Detect changed components
         id: set-matrix
         run: |
-          # Get all component directories
-          ALL_COMPONENTS='["client", "server"]'
-
           # Get changed files in this push
           CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep '^src/' || true)
 
+          CLIENT_CHANGED="false"
+          SERVER_CHANGED="false"
+          COMPONENTS_LIST=""
+
           if [ -z "$CHANGED" ]; then
-            echo "No component changes detected, building all components"
-            COMPONENTS=$ALL_COMPONENTS
-            COMPONENTS_LIST="client server"
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-          else
-            # Extract unique component names
-            COMPONENTS_LIST=$(echo "$CHANGED" | cut -d'/' -f2 | sort -u | tr '\n' ' ' | sed 's/ *$//')
-            COMPONENTS=$(echo "$COMPONENTS_LIST" | tr ' ' '\n' | jq -R -s -c 'split("\n")[:-1]')
-            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "No component changes detected"
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+            echo "components=" >> $GITHUB_OUTPUT
+            echo "client-changed=false" >> $GITHUB_OUTPUT
+            echo "server-changed=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
+          # Check for client changes
+          if echo "$CHANGED" | grep -q '^src/client/'; then
+            CLIENT_CHANGED="true"
+            COMPONENTS_LIST="client"
+          fi
+
+          # Check for server changes
+          if echo "$CHANGED" | grep -q '^src/server/'; then
+            SERVER_CHANGED="true"
+            if [ -n "$COMPONENTS_LIST" ]; then
+              COMPONENTS_LIST="$COMPONENTS_LIST server"
+            else
+              COMPONENTS_LIST="server"
+            fi
+          fi
+
+          COMPONENTS=$(echo "$COMPONENTS_LIST" | tr ' ' '\n' | jq -R -s -c 'split("\n")[:-1]')
+
+          echo "has-changes=true" >> $GITHUB_OUTPUT
           echo "matrix=$COMPONENTS" >> $GITHUB_OUTPUT
           echo "components=$COMPONENTS_LIST" >> $GITHUB_OUTPUT
+          echo "client-changed=$CLIENT_CHANGED" >> $GITHUB_OUTPUT
+          echo "server-changed=$SERVER_CHANGED" >> $GITHUB_OUTPUT
           echo "Changed components: $COMPONENTS_LIST"
+
+  # Get current versions for changed components
+  get-versions:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      client-version: ${{ steps.versions.outputs.client-version }}
+      server-version: ${{ steps.versions.outputs.server-version }}
+      client-new-version: ${{ steps.versions.outputs.client-new-version }}
+      server-new-version: ${{ steps.versions.outputs.server-new-version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get and bump versions
+        id: versions
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          CLIENT_CHANGED: ${{ needs.detect-changes.outputs.client-changed }}
+          SERVER_CHANGED: ${{ needs.detect-changes.outputs.server-changed }}
+        run: |
+          # Determine bump type from commit message
+          determine_bump_type() {
+            local msg="$COMMIT_MESSAGE"
+            if [[ "$msg" =~ breaking|BREAKING\ CHANGE|^feat(\(.+\))?!: ]]; then
+              echo "major"
+            elif [[ "$msg" =~ ^feat ]]; then
+              echo "minor"
+            else
+              echo "patch"
+            fi
+          }
+
+          # Bump semantic version
+          bump_version() {
+            local version="$1"
+            local bump_type="$2"
+
+            local major minor patch
+            IFS='.' read -r major minor patch <<< "${version#v}"
+
+            case "$bump_type" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+
+            echo "${major}.${minor}.${patch}"
+          }
+
+          BUMP_TYPE=$(determine_bump_type)
+          echo "Detected bump type: $BUMP_TYPE"
+
+          # Get current versions from git tags
+          # Format: client-v1.0.0, server-v1.0.0
+          CLIENT_CURRENT=$(git tag -l 'client-v*' | sort -V | tail -1 | sed 's/client-v//' || echo "0.0.0")
+          SERVER_CURRENT=$(git tag -l 'server-v*' | sort -V | tail -1 | sed 's/server-v//' || echo "0.0.0")
+
+          # Default to 1.0.0 if no tags exist
+          [ -z "$CLIENT_CURRENT" ] && CLIENT_CURRENT="1.0.0"
+          [ -z "$SERVER_CURRENT" ] && SERVER_CURRENT="1.0.0"
+
+          echo "Current client version: $CLIENT_CURRENT"
+          echo "Current server version: $SERVER_CURRENT"
+
+          # Calculate new versions for changed components
+          if [ "$CLIENT_CHANGED" == "true" ]; then
+            CLIENT_NEW=$(bump_version "$CLIENT_CURRENT" "$BUMP_TYPE")
+          else
+            CLIENT_NEW="$CLIENT_CURRENT"
+          fi
+
+          if [ "$SERVER_CHANGED" == "true" ]; then
+            SERVER_NEW=$(bump_version "$SERVER_CURRENT" "$BUMP_TYPE")
+          else
+            SERVER_NEW="$SERVER_CURRENT"
+          fi
+
+          echo "New client version: $CLIENT_NEW"
+          echo "New server version: $SERVER_NEW"
+
+          echo "client-version=$CLIENT_CURRENT" >> $GITHUB_OUTPUT
+          echo "server-version=$SERVER_CURRENT" >> $GITHUB_OUTPUT
+          echo "client-new-version=$CLIENT_NEW" >> $GITHUB_OUTPUT
+          echo "server-new-version=$SERVER_NEW" >> $GITHUB_OUTPUT
+          echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
 
   # Run tests
   code-tests:
@@ -103,9 +213,9 @@ jobs:
       - name: Run tests
         run: npm test 2>/dev/null || echo "Tests not configured, skipping"
 
-  # Build, scan, and push Docker images
+  # Build, scan, and push Docker images with semantic versions
   build-and-push:
-    needs: [detect-changes, code-tests]
+    needs: [detect-changes, get-versions, code-tests]
     if: needs.detect-changes.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -114,13 +224,14 @@ jobs:
       fail-fast: false
 
     permissions:
-      contents: read
+      contents: write
       id-token: write
       packages: write
       security-events: write
 
     outputs:
-      git-sha: ${{ steps.meta.outputs.short-sha }}
+      client-version: ${{ steps.set-version.outputs.client-version }}
+      server-version: ${{ steps.set-version.outputs.server-version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -132,26 +243,29 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get component metadata
-        id: meta
+      - name: Get component version
+        id: set-version
         run: |
           COMPONENT="${{ matrix.component }}"
-          VERSION="1.0.0"
+
+          if [ "$COMPONENT" == "client" ]; then
+            VERSION="${{ needs.get-versions.outputs.client-new-version }}"
+            echo "client-version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            VERSION="${{ needs.get-versions.outputs.server-new-version }}"
+            echo "server-version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
           SHORT_SHA=$(git rev-parse --short HEAD)
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "image-repo=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/url-shortener-$COMPONENT" >> $GITHUB_OUTPUT
 
+          echo "Building $COMPONENT version $VERSION"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Verify GitHub Container Registry access
-        run: |
-          echo "🔍 Verifying GitHub Container Registry access..."
-          echo "Registry: ${{ env.REGISTRY }}"
-          echo "Namespace: ${{ env.IMAGE_NAMESPACE }}"
-          echo "Will push to: ${{ steps.meta.outputs.image-repo }}"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -159,27 +273,219 @@ jobs:
           context: ./src/${{ matrix.component }}
           push: true
           tags: |
-            ${{ steps.meta.outputs.image-repo }}:git-${{ steps.meta.outputs.short-sha }}
-            ${{ steps.meta.outputs.image-repo }}:v${{ steps.meta.outputs.version }}
-            ${{ steps.meta.outputs.image-repo }}:latest
+            ${{ steps.set-version.outputs.image-repo }}:v${{ steps.set-version.outputs.version }}
+            ${{ steps.set-version.outputs.image-repo }}:git-${{ steps.set-version.outputs.short-sha }}
+            ${{ steps.set-version.outputs.image-repo }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.set-version.outputs.version }}
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Create git tag for component
+        run: |
+          COMPONENT="${{ matrix.component }}"
+          VERSION="${{ steps.set-version.outputs.version }}"
+          TAG_NAME="${COMPONENT}-v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Create tag if it doesn't exist
+          if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            git tag -a "$TAG_NAME" -m "Release $COMPONENT v$VERSION"
+            git push origin "$TAG_NAME"
+            echo "✅ Created tag: $TAG_NAME"
+          else
+            echo "ℹ️ Tag $TAG_NAME already exists, skipping"
+          fi
 
       - name: Confirm image push
         if: success()
         run: |
           echo "✅ Successfully pushed images for ${{ matrix.component }}:"
-          echo "  - ${{ steps.meta.outputs.image-repo }}:git-${{ steps.meta.outputs.short-sha }}"
-          echo "  - ${{ steps.meta.outputs.image-repo }}:v${{ steps.meta.outputs.version }}"
-          echo "  - ${{ steps.meta.outputs.image-repo }}:latest"
+          echo "  - ${{ steps.set-version.outputs.image-repo }}:v${{ steps.set-version.outputs.version }}"
+          echo "  - ${{ steps.set-version.outputs.image-repo }}:git-${{ steps.set-version.outputs.short-sha }}"
+          echo "  - ${{ steps.set-version.outputs.image-repo }}:latest"
+
+  # Update Helm chart with new image versions
+  update-helm-chart:
+    needs: [detect-changes, get-versions, build-and-push]
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      chart-version: ${{ steps.update-chart.outputs.new-chart-version }}
+      chart-updated: ${{ steps.update-chart.outputs.chart-updated }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Update Helm chart values and version
+        id: update-chart
+        env:
+          CLIENT_CHANGED: ${{ needs.detect-changes.outputs.client-changed }}
+          SERVER_CHANGED: ${{ needs.detect-changes.outputs.server-changed }}
+          CLIENT_VERSION: ${{ needs.get-versions.outputs.client-new-version }}
+          SERVER_VERSION: ${{ needs.get-versions.outputs.server-new-version }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          CHART_FILE="release/helm-chart/url-shortener/Chart.yaml"
+          VALUES_FILE="release/helm-chart/url-shortener/values.yaml"
+
+          echo "📦 Updating Helm chart..."
+
+          # Update image tags in values.yaml for changed components
+          if [ "$CLIENT_CHANGED" == "true" ]; then
+            echo "Updating client image tag to v$CLIENT_VERSION"
+            yq eval ".client.image.tag = \"v$CLIENT_VERSION\"" -i "$VALUES_FILE"
+          fi
+
+          if [ "$SERVER_CHANGED" == "true" ]; then
+            echo "Updating server image tag to v$SERVER_VERSION"
+            yq eval ".server.image.tag = \"v$SERVER_VERSION\"" -i "$VALUES_FILE"
+          fi
+
+          # Get current chart version and bump it
+          CURRENT_CHART_VERSION=$(yq '.version' "$CHART_FILE")
+          echo "Current chart version: $CURRENT_CHART_VERSION"
+
+          # Determine bump type
+          if [[ "$COMMIT_MESSAGE" =~ breaking|BREAKING\ CHANGE|^feat(\(.+\))?!: ]]; then
+            BUMP_TYPE="major"
+          elif [[ "$COMMIT_MESSAGE" =~ ^feat ]]; then
+            BUMP_TYPE="minor"
+          else
+            BUMP_TYPE="patch"
+          fi
+
+          # Parse and bump version
+          IFS='.' read -r major minor patch <<< "$CURRENT_CHART_VERSION"
+          case "$BUMP_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          NEW_CHART_VERSION="${major}.${minor}.${patch}"
+
+          echo "New chart version: $NEW_CHART_VERSION (bump type: $BUMP_TYPE)"
+
+          # Update Chart.yaml
+          yq eval ".version = \"$NEW_CHART_VERSION\"" -i "$CHART_FILE"
+
+          # Update appVersion to reflect the latest component versions
+          APP_VERSION="client-v${CLIENT_VERSION}_server-v${SERVER_VERSION}"
+          yq eval ".appVersion = \"$APP_VERSION\"" -i "$CHART_FILE"
+
+          echo "new-chart-version=$NEW_CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "chart-updated=true" >> $GITHUB_OUTPUT
+          echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Commit Helm chart changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          CLIENT_VERSION="${{ needs.get-versions.outputs.client-new-version }}"
+          SERVER_VERSION="${{ needs.get-versions.outputs.server-new-version }}"
+          CHART_VERSION="${{ steps.update-chart.outputs.new-chart-version }}"
+
+          git add release/helm-chart/url-shortener/
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore(helm): update chart to v$CHART_VERSION with new image versions
+
+          - Client image: v$CLIENT_VERSION
+          - Server image: v$SERVER_VERSION
+          - Chart version: $CHART_VERSION
+
+          [skip ci]"
+
+          git push origin main
+          echo "✅ Helm chart changes committed"
+
+  # Package and publish Helm chart
+  publish-helm-chart:
+    needs: [update-helm-chart]
+    if: needs.update-helm-chart.outputs.chart-updated == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Set up yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Lint Helm chart
+        run: |
+          cd release/helm-chart/url-shortener/
+          helm lint . --strict
+
+      - name: Package Helm chart
+        id: package
+        run: |
+          cd release/helm-chart/url-shortener/
+
+          CHART_NAME=$(yq '.name' Chart.yaml)
+          CHART_VERSION=$(yq '.version' Chart.yaml)
+          CHART_PACKAGE="${CHART_NAME}-${CHART_VERSION}.tgz"
+
+          echo "📦 Packaging chart: $CHART_PACKAGE"
+          helm package . --destination /tmp
+
+          echo "chart-package=$CHART_PACKAGE" >> $GITHUB_OUTPUT
+          echo "chart-name=$CHART_NAME" >> $GITHUB_OUTPUT
+          echo "chart-version=$CHART_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login -u ${{ github.actor }} --password-stdin ${{ env.REGISTRY }}
+
+      - name: Publish Helm chart to GHCR
+        run: |
+          CHART_PACKAGE="/tmp/${{ steps.package.outputs.chart-package }}"
+
+          echo "📤 Publishing chart to GHCR..."
+          helm push "$CHART_PACKAGE" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts
+
+          echo "✅ Chart published: ${{ steps.package.outputs.chart-name }}:${{ steps.package.outputs.chart-version }}"
+
+      - name: Create Git tag for Helm chart
+        run: |
+          CHART_VERSION="${{ steps.package.outputs.chart-version }}"
+          TAG_NAME="helm-chart/v${CHART_VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG_NAME" -m "Helm Chart Release v$CHART_VERSION" || echo "Tag already exists"
+          git push origin "$TAG_NAME" 2>/dev/null || echo "Tag push skipped"
 
   # Build summary
   build-summary:
-    needs: [detect-changes, code-tests, build-and-push]
+    needs: [detect-changes, get-versions, build-and-push, update-helm-chart, publish-helm-chart]
     if: always() && needs.detect-changes.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -189,14 +495,26 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Changed Components:** ${{ needs.detect-changes.outputs.changed-components }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Tests | ${{ needs.code-tests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build & Push | ${{ needs.build-and-push.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
-            echo "✅ **Images pushed to:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Build failed. Check logs for details.**" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Images" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Version | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.detect-changes.outputs.client-changed }}" == "true" ]; then
+            echo "| Client | v${{ needs.get-versions.outputs.client-new-version }} | ✅ |" >> $GITHUB_STEP_SUMMARY
           fi
+          if [ "${{ needs.detect-changes.outputs.server-changed }}" == "true" ]; then
+            echo "| Server | v${{ needs.get-versions.outputs.server-new-version }} | ✅ |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Helm Chart" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart Version | ${{ needs.update-helm-chart.outputs.chart-version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Published | ${{ needs.publish-helm-chart.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull Commands" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Pull Helm chart" >> $GITHUB_STEP_SUMMARY
+          echo "helm pull oci://ghcr.io/${{ github.repository_owner }}/helm-charts/url-shortener --version ${{ needs.update-helm-chart.outputs.chart-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
