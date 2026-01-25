@@ -2,8 +2,8 @@ apiVersion: v2
 name: url-shortener
 description: A Helm chart for URL Shortener application
 type: application
-version: 0.6.2
-appVersion: "v1.4.1"
+version: 0.6.3
+appVersion: "v1.4.2"
 maintainers:
   - name: DevOps Team
     email: devops@example.com
