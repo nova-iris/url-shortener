@@ -41,6 +41,7 @@ app.get("/health", (req, res) => {
 
 // Add API prefix to URL routes
 app.use("/api/url", urlRouter);
+app.use("/api", redirectRouter);
 app.use("/", redirectRouter);
 
 // 404 handler

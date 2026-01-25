@@ -2,6 +2,12 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Image pull secrets for private registries
+imagePullSecrets: []
+# Example:
+# imagePullSecrets:
+#   - name: ghcr-secret
+
 # Image settings
 image:
   # Set to true to use locally loaded images in Minikube
@@ -158,6 +164,11 @@ client:
     tag: "latest"
     pullPolicy: IfNotPresent
   replicaCount: 1
+  # Internal backend URL for API proxy
+  # The client server proxies /api requests to the internal backend service
+  # Leave empty/unset to use default: http://<release>-server:<port>
+  # The backend is NOT exposed to the internet - all API traffic goes through the client proxy
+  # backendUrl: ""
   resources:
     requests:
       cpu: "150m"

@@ -23,6 +23,10 @@ spec:
         prometheus.io/path: "/metrics"
       {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: server
           image: {{ include "url-shortener.serverImage" . | quote }}

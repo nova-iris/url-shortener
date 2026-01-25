@@ -17,6 +17,10 @@ spec:
         {{- include "url-shortener.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: client
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: client
           image: {{ include "url-shortener.clientImage" . | quote }}
@@ -27,10 +31,12 @@ spec:
               protocol: TCP
           env:
             - name: BACKEND_URL
-              {{- if .Values.networking.useIngress }}
-              value: {{ printf "http://%s" (index .Values.networking.ingress.hosts 0).host | quote }}
+              # Internal cluster service URL for API proxy
+              # The client server proxies /api requests to this internal backend URL
+              {{- if .Values.client.backendUrl }}
+              value: {{ .Values.client.backendUrl | quote }}
               {{- else }}
-              value: {{ printf "http://%s:%d" .Values.networking.externalAccessHost (int .Values.server.service.nodePort) | quote }}
+              value: {{ printf "http://%s-server:%d" (include "url-shortener.fullname" .) (int .Values.server.service.port) | quote }}
               {{- end }}
           securityContext:
             readOnlyRootFilesystem: true
