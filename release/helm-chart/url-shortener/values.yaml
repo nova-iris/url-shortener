@@ -1,7 +1,6 @@
 # Global settings
 nameOverride: ""
 fullnameOverride: ""
-
 # Image pull secrets for private registries
 imagePullSecrets: []
 # Example:
@@ -15,7 +14,6 @@ image:
   # Registry settings (used when localImages is false)
   registry: ghcr.io
   organization: nova-iris
-
 # Network configuration
 networking:
   # Set to true to use Ingress, false to use NodePort
@@ -33,7 +31,6 @@ networking:
           - path: /
             pathType: Prefix
     tls: []
-
 # MariaDB configuration
 mariadb:
   # Set to true to deploy MariaDB in the cluster
@@ -53,37 +50,35 @@ mariadb:
   persistence:
     enabled: true
     size: "1Gi"
-    storageClass: ""  # Use default storageClass
+    storageClass: "" # Use default storageClass
     # Set to true to use emptyDir (ephemeral storage)
     # This will make MariaDB use temporary storage that is lost when the pod is deleted
     # Useful for development, testing, and CI/CD pipelines
     useTemporaryStorage: false
   auth:
-    rootPassword: "rootpassword"  # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
+    rootPassword: "rootpassword" # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
     database: "urlshortener"
     username: "urlshortener"
-    password: "urlshortener_password"  # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
+    password: "urlshortener_password" # REQUIRED: set via values or Kubernetes Secret; do not use defaults in production
   service:
     type: ClusterIP
     port: 3306
   # Connection pool settings
   poolMax: 10
-
 # External database configuration (used when mariadb.enabled is false)
 externalDatabase:
   host: ""
   port: 3306
   database: "urlshortener"
   username: "urlshortener"
-  password: ""  # Use existingSecret in production
+  password: "" # Use existingSecret in production
   # existingSecret: ""
   # existingSecretPasswordKey: "password"
-
 # Server (backend) configuration
 server:
   image:
     repository: "url-shortener-server"
-    tag: "v1.0.0"
+    tag: "v1.0.1"
     pullPolicy: IfNotPresent
   replicaCount: 1
   resources:
@@ -96,11 +91,10 @@ server:
   service:
     type: NodePort
     port: 5000
-    nodePort: 30500  # Used when type is NodePort
+    nodePort: 30500 # Used when type is NodePort
   env:
     NODE_ENV: "production"
-    LOG_LEVEL: "info"  # Logging level: error, warn, info, debug
-
+    LOG_LEVEL: "info" # Logging level: error, warn, info, debug
 # Observability configuration
 observability:
   # Prometheus metrics
@@ -108,14 +102,13 @@ observability:
     enabled: true
     # Prometheus annotations for service discovery
     serviceMonitor:
-      enabled: false  # Set to true if using Prometheus Operator
+      enabled: false # Set to true if using Prometheus Operator
       interval: 30s
       scrapeTimeout: 10s
-  
   # Distributed tracing with Jaeger
   tracing:
-    enabled: false  # Set to true to enable OpenTelemetry tracing
-    samplingRate: "0.1"  # 10% sampling in production
+    enabled: false # Set to true to enable OpenTelemetry tracing
+    samplingRate: "0.1" # 10% sampling in production
     jaeger:
       # Deploy Jaeger in the cluster
       deploy: false
@@ -138,7 +131,6 @@ observability:
         uiPort: 16686
       # External Jaeger endpoint (used when deploy is false)
       externalEndpoint: ""
-
   # MariaDB metrics exporter
   mariadbExporter:
     enabled: false
@@ -156,7 +148,6 @@ observability:
     service:
       type: ClusterIP
       port: 9104
-
 # Client (frontend) configuration
 client:
   image:
@@ -179,4 +170,4 @@ client:
   service:
     type: NodePort
     port: 4173
-    nodePort: 30173  # Used when type is NodePort
+    nodePort: 30173 # Used when type is NodePort
